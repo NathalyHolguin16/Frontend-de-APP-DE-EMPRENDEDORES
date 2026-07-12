@@ -1,0 +1,61 @@
+Integración y mejoras: cliente API, autenticación, UI y assets
+
+Resumen de cambios realizados:
+
+1) Cliente API y autenticación
+- services/mercattoApi.js
+  - Añadido fallbackBaseUrl y uso de EXPO_PUBLIC_MERCATTO_API_URL.
+  - Implementado fetchWithTimeout para timeouts de petición.
+  - Añadidos reintentos y backoff sencillo para errores 5xx y de red.
+  - Auto-attach del token: si no se pasa token, intenta cargar el guardado y añade Authorization.
+  - Funciones saveToken, getStoredToken y clearStoredToken con AsyncStorage.
+
+- scripts/test-auth.js
+  - Script de prueba para /api/register y /api/login contra el backend.
+  - Permite verificar rápidamente el flujo de registro/login.
+
+- package.json
+  - Añadido script test-auth.
+
+- contexts/AuthContext.js
+  - Simplificado el uso de getMe() apoyándose en el auto-attach del token.
+  - Conservada la persistencia y limpieza de sesión.
+
+2) Dependencias
+- Instalado @react-native-async-storage/async-storage para persistir el token.
+- package-lock.json actualizado.
+
+3) UI / Tema / Colores
+- constants/theme.ts
+  - Cambio del color principal de morado a naranja.
+
+- components/CustomButton.js
+  - Primary, borde secondary y texto secondary actualizados a naranja.
+
+- components/ProductCard.js
+  - Título actualizado a naranja.
+
+- components/themed-text.tsx
+  - Estilo link actualizado a naranja.
+
+4) Pantallas de autenticación
+- screens/LoginScreen.js y screens/RegisterScreen.js
+  - Se añadió el logo desde assets/images/icon.png.
+  - Fondo blanco y estilos de inputs actualizados.
+  - Mensajes de estado/errores en una caja clara.
+  - Eliminados los emojis dentro de las tarjetas.
+  - Layout probado en web.
+
+5) Assets
+- logo.jpeg movido a assets/images/icon.png.
+- Se reinició Metro/Expo y se limpió caché para cargar el nuevo asset.
+
+6) Acciones de verificación realizadas
+- Arranqué Expo y la versión web, resolviendo puertos alternativos cuando fue necesario.
+- Probé el endpoint /api/documentation.
+- Probé el flujo de registro/login con scripts/test-auth.js y devolvió tokens correctamente.
+
+Notas
+- Sería útil añadir refresh tokens si el backend los soporta.
+- Recomendable generar versiones @2x y @3x del icono para distribución.
+- Recomendable añadir CI para validar el contrato API.

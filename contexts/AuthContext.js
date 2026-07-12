@@ -1,13 +1,13 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
 import {
-  clearStoredToken,
-  getMe,
-  getStoredToken,
-  loginUser,
-  logoutUser,
-  registerUser,
-  saveToken,
+    clearStoredToken,
+    getMe,
+    getStoredToken,
+    loginUser,
+    logoutUser,
+    registerUser,
+    saveToken,
 } from "../services/mercattoApi";
 
 const AuthContext = createContext(null);

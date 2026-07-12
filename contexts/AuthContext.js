@@ -1,13 +1,13 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
 import {
-    clearStoredToken,
-    getMe,
-    getStoredToken,
-    loginUser,
-    logoutUser,
-    registerUser,
-    saveToken,
+  clearStoredToken,
+  getMe,
+  getStoredToken,
+  loginUser,
+  logoutUser,
+  registerUser,
+  saveToken,
 } from "../services/mercattoApi";
 
 const AuthContext = createContext(null);
@@ -16,6 +16,12 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [profile, setProfile] = useState(null);
   const [isBooting, setIsBooting] = useState(true);
+
+  const clearSession = async () => {
+    await clearStoredToken();
+    setToken(null);
+    setProfile(null);
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -43,10 +49,8 @@ export function AuthProvider({ children }) {
         setToken(storedToken);
         setProfile(currentProfile);
       } catch {
-        await clearStoredToken();
         if (mounted) {
-          setToken(null);
-          setProfile(null);
+          await clearSession();
         }
       } finally {
         if (mounted) {
@@ -93,9 +97,7 @@ export function AuthProvider({ children }) {
       await logoutUser(token).catch(() => null);
     }
 
-    await clearStoredToken();
-    setToken(null);
-    setProfile(null);
+    await clearSession();
   };
 
   const value = {
@@ -109,9 +111,16 @@ export function AuthProvider({ children }) {
       if (!token) {
         return null;
       }
-      const currentProfile = await getMe();
-      setProfile(currentProfile);
-      return currentProfile;
+      try {
+        const currentProfile = await getMe();
+        setProfile(currentProfile);
+        return currentProfile;
+      } catch (error) {
+        if (error?.status === 401) {
+          await clearSession();
+        }
+        throw error;
+      }
     },
   };
 

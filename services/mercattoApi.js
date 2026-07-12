@@ -24,7 +24,10 @@ async function fetchWithTimeout(url, opts = {}, timeoutMs = 8000) {
   }
 }
 
-async function request(path, { method = "GET", body, token, timeoutMs } = {}) {
+async function request(
+  path,
+  { method = "GET", body, token, timeoutMs, skipStoredToken = false } = {},
+) {
   const headers = {
     Accept: "application/json",
   };
@@ -35,7 +38,7 @@ async function request(path, { method = "GET", body, token, timeoutMs } = {}) {
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
-  } else {
+  } else if (!skipStoredToken) {
     // If no token provided, try to load stored token automatically
     try {
       const stored = await getStoredToken();
@@ -138,6 +141,7 @@ export async function registerUser(payload) {
   return request("/api/register", {
     method: "POST",
     body: payload,
+    skipStoredToken: true,
   });
 }
 
@@ -145,6 +149,7 @@ export async function loginUser(payload) {
   return request("/api/login", {
     method: "POST",
     body: payload,
+    skipStoredToken: true,
   });
 }
 

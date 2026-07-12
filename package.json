@@ -9,7 +9,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test-auth": "node ./scripts/test-auth.js"
+    "test-auth": "node ./scripts/test-auth.js",
+    "check-backend": "node ./scripts/test-auth.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

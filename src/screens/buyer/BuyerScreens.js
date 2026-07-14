@@ -447,6 +447,10 @@ function BuyerOrderCard({ order, navigation }) {
 
 export function BuyerProfileScreen({ navigation }) {
   const { user, selectedCity, deliveryAddress, logout, setMode } = useMercatto();
+  const handleLogout = () => {
+    logout();
+    goToLogin(navigation);
+  };
   const items = [
     ["create-outline", "Editar información", "profile-edit"],
     ["location-outline", "Administrar direcciones", "address"],
@@ -492,7 +496,20 @@ export function BuyerProfileScreen({ navigation }) {
             navigation.getParent()?.replace?.("EntrepreneurTabs");
           }}
         />
-        <MenuRow icon="log-out-outline" label="Cerrar sesión" danger onPress={() => { logout(); navigation.getParent()?.replace?.("Login"); }} />
+      </Card>
+      <Card style={styles.logoutCard}>
+        <View style={{ flex: 1 }}>
+          <Text style={typography.h3}>¿Terminaste por ahora?</Text>
+          <Text style={typography.muted}>
+            Cierra sesión para proteger tu cuenta y tus pedidos.
+          </Text>
+        </View>
+        <PrimaryButton
+          title="Cerrar sesión"
+          icon="log-out-outline"
+          variant="secondary"
+          onPress={handleLogout}
+        />
       </Card>
     </Screen>
   );
@@ -596,6 +613,14 @@ function MenuRow({ icon, label, onPress, danger }) {
       <Ionicons name="chevron-forward" size={18} color={colors.muted} />
     </Pressable>
   );
+}
+
+function goToLogin(navigation) {
+  const rootNavigation = navigation.getParent?.() || navigation;
+  rootNavigation.reset({
+    index: 0,
+    routes: [{ name: "Login" }],
+  });
 }
 
 const styles = StyleSheet.create({
@@ -802,5 +827,10 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.ink,
     fontWeight: "850",
+  },
+  logoutCard: {
+    borderWidth: 1,
+    borderColor: "#F4C5BA",
+    backgroundColor: "#FFF8F6",
   },
 });

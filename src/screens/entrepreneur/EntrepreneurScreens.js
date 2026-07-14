@@ -24,8 +24,12 @@ import { useMercatto } from "../../context/MercattoContext";
 import { colors, radius, shadows, spacing, typography } from "../../theme/mercattoTheme";
 
 export function EntrepreneurDashboardScreen({ navigation }) {
-  const { setMode } = useMercatto();
+  const { logout, setMode } = useMercatto();
   const [open, setOpen] = useState(true);
+  const handleLogout = () => {
+    logout();
+    goToLogin(navigation);
+  };
   return (
     <Screen>
       <Card style={styles.heroAdmin}>
@@ -45,6 +49,12 @@ export function EntrepreneurDashboardScreen({ navigation }) {
           icon={open ? "pause-circle-outline" : "play-circle-outline"}
           variant="secondary"
           onPress={() => setOpen((value) => !value)}
+        />
+        <PrimaryButton
+          title="Cerrar sesión"
+          icon="log-out-outline"
+          variant="ghost"
+          onPress={handleLogout}
         />
       </Card>
       <View style={styles.statsGrid}>
@@ -209,6 +219,7 @@ export function SellerPromosScreen() {
 }
 
 export function SellerBusinessScreen({ navigation }) {
+  const { logout } = useMercatto();
   const business = businesses[0];
   const [form, setForm] = useState({
     name: entrepreneurProfile.name,
@@ -266,6 +277,21 @@ export function SellerBusinessScreen({ navigation }) {
       </Card>
       <PrimaryButton title="Vista previa como comprador" icon="eye-outline" onPress={() => navigation.getParent()?.navigate("BusinessDetail", { businessId: "dulce-orilla" })} />
       <PrimaryButton title="Guardar cambios" variant="secondary" onPress={() => Alert.alert("Guardado", "Información del negocio actualizada en maqueta.")} />
+      <Card style={styles.logoutCard}>
+        <Text style={typography.h3}>Sesión del emprendedor</Text>
+        <Text style={typography.muted}>
+          Sal de Mercatto cuando termines de administrar tu negocio.
+        </Text>
+        <PrimaryButton
+          title="Cerrar sesión"
+          icon="log-out-outline"
+          variant="secondary"
+          onPress={() => {
+            logout();
+            goToLogin(navigation);
+          }}
+        />
+      </Card>
     </Screen>
   );
 }
@@ -295,7 +321,7 @@ export function SellerSettingsScreen({ navigation }) {
         ))}
       </Card>
       <PrimaryButton title="Cambiar al modo comprador" icon="swap-horizontal-outline" onPress={() => { setMode("buyer"); navigation.getParent()?.replace?.("BuyerTabs"); }} />
-      <PrimaryButton title="Cerrar sesión" variant="secondary" onPress={() => { logout(); navigation.getParent()?.replace?.("Login"); }} />
+      <PrimaryButton title="Cerrar sesión" variant="secondary" onPress={() => { logout(); goToLogin(navigation); }} />
     </Screen>
   );
 }
@@ -322,6 +348,14 @@ function nextStatus(status) {
   const flow = ["Nuevo", "Confirmado", "En preparación", "Listo para retirar", "Enviado", "Entregado"];
   const index = flow.indexOf(status);
   return flow[Math.min(index + 1, flow.length - 1)] || "Confirmado";
+}
+
+function goToLogin(navigation) {
+  const rootNavigation = navigation.getParent?.() || navigation;
+  rootNavigation.reset({
+    index: 0,
+    routes: [{ name: "Login" }],
+  });
 }
 
 const styles = StyleSheet.create({
@@ -452,5 +486,10 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.ink,
     fontWeight: "850",
+  },
+  logoutCard: {
+    borderWidth: 1,
+    borderColor: "#F4C5BA",
+    backgroundColor: "#FFF8F6",
   },
 });

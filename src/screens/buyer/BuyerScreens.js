@@ -5,7 +5,6 @@ import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "rea
 import {
   Avatar,
   BusinessCard,
-  BuyerHeader,
   Card,
   Chip,
   EmptyState,
@@ -19,13 +18,41 @@ import {
   SearchBar,
   SectionHeader,
 } from "../../components/MercattoUI";
-import { banners, businesses, categories, products, promotions } from "../../data/mercattoData";
+import { businesses, products, promotions } from "../../data/mercattoData";
 import { useMercatto } from "../../context/MercattoContext";
 import { colors, radius, shadows, spacing, typography } from "../../theme/mercattoTheme";
 
+const categoryShowcase = [
+  {
+    label: "Comida",
+    image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=700&q=80",
+  },
+  {
+    label: "Postres",
+    image: "https://images.unsplash.com/photo-1488477181946-6428a0291777?auto=format&fit=crop&w=700&q=80",
+  },
+  {
+    label: "Artesanías",
+    image: "https://images.unsplash.com/photo-1528698827591-e19ccd7bc23d?auto=format&fit=crop&w=700&q=80",
+  },
+  {
+    label: "Moda",
+    image: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=700&q=80",
+  },
+  {
+    label: "Regalos",
+    image: "https://images.unsplash.com/photo-1513201099705-a9746e1e201f?auto=format&fit=crop&w=700&q=80",
+  },
+  {
+    label: "Hogar",
+    image: "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=700&q=80",
+  },
+];
+
 export function BuyerHomeScreen({ navigation }) {
-  const { user, selectedCity, favorites, toggleFavorite } = useMercatto();
+  const { user, selectedCity, deliveryAddress, cart, favorites, toggleFavorite } = useMercatto();
   const [query, setQuery] = useState("");
+  const cartCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
   const filteredBusinesses = businesses.filter(
     (business) =>
       business.city === selectedCity &&
@@ -35,28 +62,74 @@ export function BuyerHomeScreen({ navigation }) {
   );
 
   return (
-    <Screen>
-      <BuyerHeader navigation={navigation} title={`Hola, ${user?.firstName || "María"}`} />
-      <SearchBar value={query} onChangeText={setQuery} placeholder="Buscar emprendimientos o productos" />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>
-        {banners.map((banner) => (
-          <View key={banner.id} style={[styles.banner, { backgroundColor: banner.tone }]}>
-            <Text style={styles.bannerTitle}>{banner.title}</Text>
-            <Text style={styles.bannerText}>{banner.subtitle}</Text>
-            <PrimaryButton title="Ver ahora" variant="secondary" onPress={() => navigation.navigate("Promos")} />
-          </View>
-        ))}
-      </ScrollView>
-      <SectionHeader title="Categorías" action="Todas" />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>
-        {categories.map((category) => (
-          <Pressable key={category.id} style={styles.categoryTile}>
-            <Ionicons name={category.icon} size={24} color={colors.primaryDark} />
-            <Text style={styles.categoryText}>{category.label}</Text>
+    <Screen style={styles.homeSafe} contentStyle={styles.homeContent}>
+      <View style={styles.homeTop}>
+        <View style={styles.brandRow}>
+          <Pressable onPress={() => navigation.navigate("CitySelect", { fromApp: true })} style={styles.brandMark}>
+            <Text style={styles.brandText}>MERCATTO</Text>
+            <Ionicons name="chevron-down" size={16} color={colors.white} />
           </Pressable>
+          <View style={styles.headerActions}>
+            <IconButton
+              icon="notifications-outline"
+              color={colors.white}
+              onPress={() => navigation.navigate("StateScreen", { type: "notifications" })}
+              style={styles.transparentIcon}
+            />
+            <IconButton
+              icon="cart-outline"
+              badge={cartCount || null}
+              color={colors.white}
+              onPress={() => navigation.navigate("Cart")}
+              style={styles.transparentIcon}
+            />
+          </View>
+        </View>
+
+        <View style={styles.locationBlock}>
+          <Text style={styles.helloText}>Hola, {user?.firstName || "María"}</Text>
+          <Pressable onPress={() => navigation.navigate("Address")} style={styles.locationPill}>
+            <Ionicons name="location-outline" size={17} color={colors.ink} />
+            <Text numberOfLines={1} style={styles.locationText}>{selectedCity} · {deliveryAddress}</Text>
+            <Text style={styles.locationAction}>Cambiar</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <HeroDealCard navigation={navigation} />
+
+      <View style={styles.floatingSearch}>
+        <SearchBar value={query} onChangeText={setQuery} placeholder="Buscar emprendimientos o productos" />
+      </View>
+
+      <SectionHeader title="Categorías" action="Todas" />
+      <View style={styles.featureGrid}>
+        {categoryShowcase.slice(0, 2).map((category) => (
+          <VisualCategoryCard key={category.label} category={category} large />
+        ))}
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>
+        {categoryShowcase.slice(2).map((category) => (
+          <VisualCategoryCard key={category.label} category={category} />
         ))}
       </ScrollView>
-      <SectionHeader title="Ofertas para ti" action="Promos" onPress={() => navigation.navigate("Promos")} />
+
+      <SectionHeader title="Promos exclusivas" action="Ver promos" onPress={() => navigation.navigate("Promos")} />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>
+        {promotions.map((promo) => {
+          const business = businesses.find((item) => item.id === promo.businessId);
+          return (
+            <FeaturePromoCard
+              key={promo.id}
+              promo={promo}
+              businessName={business?.name}
+              onPress={() => navigation.navigate("BusinessDetail", { businessId: promo.businessId })}
+            />
+          );
+        })}
+      </ScrollView>
+
+      <SectionHeader title="Más ofertas para ti" action="Promos" onPress={() => navigation.navigate("Promos")} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>
         {promotions.map((promo) => {
           const business = businesses.find((item) => item.id === promo.businessId);
@@ -94,6 +167,58 @@ export function BuyerHomeScreen({ navigation }) {
         />
       ) : null}
     </Screen>
+  );
+}
+
+function HeroDealCard({ navigation }) {
+  return (
+    <Pressable onPress={() => navigation.navigate("Promos")} style={({ pressed }) => [styles.heroDeal, pressed && styles.pressed]}>
+      <View style={styles.heroCopy}>
+        <Text style={styles.plusPill}>mercatto plus</Text>
+        <Text style={styles.heroEyebrow}>Compra local con beneficios</Text>
+        <Text style={styles.heroTitle}>Envíos gratis para comprar local</Text>
+        <Text style={styles.heroBadge}>Primer pedido con 20% OFF</Text>
+      </View>
+      <View style={styles.heroArt}>
+        <View style={styles.heroDarkShape}>
+          <Text style={styles.heroPlusOne}>+</Text>
+          <Text style={styles.heroPlusTwo}>+</Text>
+          <Text style={styles.heroPlusThree}>+</Text>
+        </View>
+        <Image source={{ uri: products[0].image }} style={[styles.heroProduct, styles.heroProductMain]} resizeMode="cover" />
+        <Image source={{ uri: products[2].image }} style={[styles.heroProduct, styles.heroProductSmall]} resizeMode="cover" />
+        <Image source={{ uri: products[3].image }} style={[styles.heroProduct, styles.heroProductTiny]} resizeMode="cover" />
+      </View>
+      <View style={styles.heroPager} />
+    </Pressable>
+  );
+}
+
+function VisualCategoryCard({ category, large = false }) {
+  return (
+    <Pressable style={({ pressed }) => [styles.visualCategory, large && styles.visualCategoryLarge, pressed && styles.pressed]}>
+      <View style={styles.confettiOne} />
+      <View style={styles.confettiTwo} />
+      <View style={styles.confettiThree} />
+      <Image source={{ uri: category.image }} style={[styles.visualCategoryImage, large && styles.visualCategoryImageLarge]} resizeMode="cover" />
+      <Text style={[styles.visualCategoryText, large && styles.visualCategoryTextLarge]}>{category.label}</Text>
+    </Pressable>
+  );
+}
+
+function FeaturePromoCard({ promo, businessName, onPress }) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.featurePromo, pressed && styles.pressed]}>
+      <View style={styles.featurePromoCopy}>
+        <Text style={styles.featurePromoKicker}>Exclusivo para ti</Text>
+        <Text style={styles.featurePromoTitle}>Hasta {promo.discount}% OFF</Text>
+        <Text style={styles.featurePromoText}>en {businessName}</Text>
+      </View>
+      <Image source={{ uri: promo.image }} style={styles.featurePromoImage} resizeMode="cover" />
+      <View style={styles.featurePromoLogo}>
+        <Text style={styles.featurePromoLogoText}>M</Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -624,6 +749,334 @@ function goToLogin(navigation) {
 }
 
 const styles = StyleSheet.create({
+  homeSafe: {
+    backgroundColor: colors.white,
+  },
+  homeContent: {
+    paddingHorizontal: spacing.md,
+    paddingTop: 0,
+    gap: spacing.lg,
+    backgroundColor: colors.white,
+  },
+  homeTop: {
+    marginHorizontal: -spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    backgroundColor: colors.primary,
+    borderBottomLeftRadius: 34,
+    borderBottomRightRadius: 34,
+    gap: spacing.lg,
+    overflow: "hidden",
+  },
+  brandRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  brandMark: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  brandText: {
+    color: colors.white,
+    fontSize: 18,
+    fontWeight: "950",
+    letterSpacing: 0,
+  },
+  headerActions: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  transparentIcon: {
+    backgroundColor: "rgba(23, 25, 24, 0.18)",
+    boxShadow: "none",
+  },
+  locationBlock: {
+    gap: spacing.sm,
+  },
+  helloText: {
+    color: colors.white,
+    fontSize: 26,
+    fontWeight: "950",
+  },
+  locationPill: {
+    minHeight: 48,
+    borderRadius: radius.pill,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  locationText: {
+    flex: 1,
+    color: colors.ink,
+    fontWeight: "800",
+  },
+  locationAction: {
+    color: colors.primaryDark,
+    fontWeight: "950",
+  },
+  heroDeal: {
+    minHeight: 262,
+    marginTop: -spacing.md,
+    borderRadius: 34,
+    backgroundColor: colors.primary,
+    overflow: "hidden",
+    flexDirection: "row",
+    position: "relative",
+    ...shadows.card,
+  },
+  heroCopy: {
+    width: "57%",
+    padding: spacing.lg,
+    justifyContent: "center",
+    gap: spacing.sm,
+    zIndex: 2,
+  },
+  plusPill: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.ink,
+    color: colors.primary,
+    borderRadius: radius.pill,
+    overflow: "hidden",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    fontSize: 13,
+    fontWeight: "950",
+  },
+  heroEyebrow: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  heroTitle: {
+    color: colors.white,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: "950",
+  },
+  heroBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.white,
+    color: colors.ink,
+    borderRadius: radius.pill,
+    overflow: "hidden",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    fontWeight: "950",
+  },
+  heroArt: {
+    flex: 1,
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  heroDarkShape: {
+    position: "absolute",
+    right: -72,
+    top: 22,
+    width: 248,
+    height: 248,
+    borderTopLeftRadius: 92,
+    borderBottomLeftRadius: 24,
+    backgroundColor: colors.ink,
+  },
+  heroPlusOne: {
+    position: "absolute",
+    top: 24,
+    left: 58,
+    color: colors.primary,
+    fontSize: 42,
+    fontWeight: "950",
+    opacity: 0.85,
+  },
+  heroPlusTwo: {
+    position: "absolute",
+    top: 88,
+    right: 44,
+    color: colors.primary,
+    fontSize: 54,
+    fontWeight: "950",
+    opacity: 0.95,
+  },
+  heroPlusThree: {
+    position: "absolute",
+    bottom: 42,
+    left: 78,
+    color: colors.primary,
+    fontSize: 36,
+    fontWeight: "950",
+    opacity: 0.65,
+  },
+  heroProduct: {
+    position: "absolute",
+    borderWidth: 4,
+    borderColor: colors.white,
+    backgroundColor: colors.softOrange,
+    ...shadows.soft,
+  },
+  heroProductMain: {
+    right: 10,
+    bottom: 26,
+    width: 118,
+    height: 118,
+    borderRadius: 59,
+  },
+  heroProductSmall: {
+    right: 88,
+    top: 58,
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+  },
+  heroProductTiny: {
+    right: 14,
+    top: 82,
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+  },
+  heroPager: {
+    position: "absolute",
+    bottom: 18,
+    alignSelf: "center",
+    left: "48%",
+    width: 34,
+    height: 10,
+    borderRadius: radius.pill,
+    backgroundColor: "rgba(255,255,255,0.85)",
+  },
+  floatingSearch: {
+    marginTop: -6,
+  },
+  featureGrid: {
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  visualCategory: {
+    width: 124,
+    minHeight: 152,
+    borderRadius: 26,
+    backgroundColor: "#F1F1F1",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: spacing.md,
+    overflow: "hidden",
+    position: "relative",
+  },
+  visualCategoryLarge: {
+    flex: 1,
+    minHeight: 182,
+  },
+  visualCategoryImage: {
+    width: 92,
+    height: 82,
+    borderRadius: 22,
+    backgroundColor: colors.softOrange,
+  },
+  visualCategoryImageLarge: {
+    width: "100%",
+    height: 108,
+  },
+  visualCategoryText: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "950",
+    textAlign: "center",
+  },
+  visualCategoryTextLarge: {
+    fontSize: 20,
+  },
+  confettiOne: {
+    position: "absolute",
+    top: 22,
+    left: 22,
+    width: 9,
+    height: 19,
+    borderRadius: 5,
+    backgroundColor: colors.primary,
+    transform: [{ rotate: "-28deg" }],
+  },
+  confettiTwo: {
+    position: "absolute",
+    top: 34,
+    right: 28,
+    width: 8,
+    height: 18,
+    borderRadius: 5,
+    backgroundColor: colors.ink,
+    transform: [{ rotate: "32deg" }],
+  },
+  confettiThree: {
+    position: "absolute",
+    top: 72,
+    left: 36,
+    width: 7,
+    height: 16,
+    borderRadius: 5,
+    backgroundColor: colors.white,
+    transform: [{ rotate: "58deg" }],
+  },
+  featurePromo: {
+    width: 318,
+    minHeight: 160,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    overflow: "hidden",
+    flexDirection: "row",
+    position: "relative",
+    ...shadows.card,
+  },
+  featurePromoCopy: {
+    flex: 1,
+    padding: spacing.lg,
+    justifyContent: "center",
+    gap: 3,
+  },
+  featurePromoKicker: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: "850",
+  },
+  featurePromoTitle: {
+    color: colors.white,
+    fontSize: 31,
+    fontWeight: "950",
+    lineHeight: 35,
+  },
+  featurePromoText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: "750",
+  },
+  featurePromoImage: {
+    width: 126,
+    height: "100%",
+    backgroundColor: colors.softOrange,
+  },
+  featurePromoLogo: {
+    position: "absolute",
+    right: 16,
+    top: 16,
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  featurePromoLogoText: {
+    color: colors.primaryDark,
+    fontSize: 22,
+    fontWeight: "950",
+  },
+  pressed: {
+    transform: [{ scale: 0.985 }],
+    opacity: 0.94,
+  },
   horizontal: {
     gap: spacing.md,
     paddingRight: spacing.md,

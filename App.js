@@ -58,10 +58,18 @@ const theme = {
 
 function TabIcon({ name, color, focused }) {
   return (
-    <>
+    <Text
+      style={{
+        width: 42,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: focused ? colors.softOrange : "transparent",
+        textAlign: "center",
+        paddingTop: 5,
+      }}
+    >
       <Ionicons name={focused ? name.replace("-outline", "") : name} size={23} color={color} />
-      {focused ? <Text style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: color, marginTop: 2 }} /> : null}
-    </>
+    </Text>
   );
 }
 
@@ -126,19 +134,20 @@ function EntrepreneurTabs() {
 
 const tabOptions = {
   headerShown: false,
-  tabBarActiveTintColor: colors.primary,
-  tabBarInactiveTintColor: "#8B8B8B",
+  tabBarActiveTintColor: colors.primaryDark,
+  tabBarInactiveTintColor: "#6F6A75",
   tabBarStyle: {
-    minHeight: 70,
+    minHeight: 76,
     paddingTop: 8,
-    paddingBottom: 10,
+    paddingBottom: 12,
     backgroundColor: colors.white,
     borderTopWidth: 1,
-    borderTopColor: "#E8E2D8",
+    borderTopColor: "#EFE9DF",
+    boxShadow: "0 -10px 24px rgba(23, 25, 24, 0.08)",
   },
   tabBarLabelStyle: {
     fontSize: 12,
-    fontWeight: "850",
+    fontWeight: "900",
   },
 };
 

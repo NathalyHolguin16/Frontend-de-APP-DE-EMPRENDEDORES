@@ -1,137 +1,176 @@
+import { Ionicons } from "@expo/vector-icons";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { StatusBar } from "expo-status-bar";
 import { Text } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import AccountScreen from "./screens/AccountScreen";
-import ConfirmacionScreen from "./screens/ConfirmacionScreen";
-import LoginScreen from "./screens/LoginScreen";
-import ProductoScreen from "./screens/ProductoScreen";
-import RegisterScreen from "./screens/RegisterScreen";
-import ResumenScreen from "./screens/ResumenScreen";
+import { MercattoProvider } from "./src/context/MercattoContext";
+import {
+  BuyerRegisterScreen,
+  CitySelectScreen,
+  EntrepreneurRegisterScreen,
+  ForgotPasswordScreen,
+  LoginScreen,
+  ModeSelectScreen,
+  RegisterRoleScreen,
+  SplashScreen,
+  VerificationScreen,
+} from "./src/screens/auth/AuthScreens";
+import {
+  AddressScreen,
+  BusinessDetailScreen,
+  BuyerHomeScreen,
+  BuyerOrdersScreen,
+  BuyerProfileScreen,
+  CartScreen,
+  CheckoutScreen,
+  FavoritesScreen,
+  OrderConfirmationScreen,
+  ProductDetailScreen,
+  PromosScreen,
+  StateScreen,
+} from "./src/screens/buyer/BuyerScreens";
+import {
+  EntrepreneurDashboardScreen,
+  SellerBusinessScreen,
+  SellerOrdersScreen,
+  SellerProductsScreen,
+  SellerPromosScreen,
+} from "./src/screens/entrepreneur/EntrepreneurScreens";
+import { colors } from "./src/theme/mercattoTheme";
 
-const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+const Tab = createBottomTabNavigator();
 
 const theme = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
-    background: "#08111d",
-    card: "#0f1b2d",
-    text: "#f8fbff",
-    border: "#1f334b",
-    primary: "#f4b942",
+    primary: colors.primary,
+    background: colors.background,
+    card: colors.white,
+    text: colors.ink,
+    border: "#E8E2D8",
   },
 };
 
-function AppTabs() {
-  const { profile } = useAuth();
-
+function TabIcon({ name, color, focused }) {
   return (
-    <Tab.Navigator
-      initialRouteName="Producto"
-      screenOptions={{
-        headerTitleAlign: "center",
-        headerStyle: {
-          backgroundColor: "#0f1b2d",
-        },
-        headerTintColor: "#f8fbff",
-        headerTitleStyle: {
-          fontWeight: "bold",
-        },
-        tabBarActiveTintColor: "#f4b942",
-        tabBarInactiveTintColor: "#93a4ba",
-        tabBarStyle: {
-          height: 65,
-          paddingBottom: 8,
-          paddingTop: 8,
-          backgroundColor: "#0f1b2d",
-          borderTopColor: "#1f334b",
-          borderTopWidth: 1,
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: "bold",
-        },
-      }}
-    >
-      <Tab.Screen
-        name="Producto"
-        component={ProductoScreen}
-        options={{
-          title: "Producto",
-          tabBarIcon: ({ color }) => (
-            <Text style={{ fontSize: 22, color }}>🛒</Text>
-          ),
-        }}
-      />
+    <>
+      <Ionicons name={focused ? name.replace("-outline", "") : name} size={23} color={color} />
+      {focused ? <Text style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: color, marginTop: 2 }} /> : null}
+    </>
+  );
+}
 
+function BuyerTabs() {
+  return (
+    <Tab.Navigator screenOptions={tabOptions}>
       <Tab.Screen
-        name="Resumen"
-        component={ResumenScreen}
-        options={{
-          title: "Resumen",
-          tabBarIcon: ({ color }) => (
-            <Text style={{ fontSize: 22, color }}>🧾</Text>
-          ),
-        }}
+        name="Inicio"
+        component={BuyerHomeScreen}
+        options={{ tabBarIcon: (props) => <TabIcon name="home-outline" {...props} /> }}
       />
-
       <Tab.Screen
-        name="Confirmacion"
-        component={ConfirmacionScreen}
-        options={{
-          title: "Confirmación",
-          tabBarLabel: "Confirmar",
-          tabBarIcon: ({ color }) => (
-            <Text style={{ fontSize: 22, color }}>🎉</Text>
-          ),
-        }}
+        name="Promos"
+        component={PromosScreen}
+        options={{ tabBarIcon: (props) => <TabIcon name="pricetag-outline" {...props} /> }}
       />
-
       <Tab.Screen
-        name="Cuenta"
-        component={AccountScreen}
-        options={{
-          title: profile?.name ? profile.name : "Cuenta",
-          tabBarIcon: ({ color }) => (
-            <Text style={{ fontSize: 22, color }}>👤</Text>
-          ),
-        }}
+        name="Pedidos"
+        component={BuyerOrdersScreen}
+        options={{ tabBarIcon: (props) => <TabIcon name="receipt-outline" {...props} /> }}
+      />
+      <Tab.Screen
+        name="Perfil"
+        component={BuyerProfileScreen}
+        options={{ tabBarIcon: (props) => <TabIcon name="person-outline" {...props} /> }}
       />
     </Tab.Navigator>
   );
 }
 
-function RootNavigator() {
-  const { isBooting, token } = useAuth();
-
-  if (isBooting) {
-    return null;
-  }
-
+function EntrepreneurTabs() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {token ? (
-        <Stack.Screen name="AppTabs" component={AppTabs} />
-      ) : (
-        <>
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Register" component={RegisterScreen} />
-        </>
-      )}
-    </Stack.Navigator>
+    <Tab.Navigator screenOptions={tabOptions}>
+      <Tab.Screen
+        name="Resumen"
+        component={EntrepreneurDashboardScreen}
+        options={{ tabBarIcon: (props) => <TabIcon name="grid-outline" {...props} /> }}
+      />
+      <Tab.Screen
+        name="SellerOrders"
+        component={SellerOrdersScreen}
+        options={{ title: "Pedidos", tabBarIcon: (props) => <TabIcon name="receipt-outline" {...props} /> }}
+      />
+      <Tab.Screen
+        name="SellerProducts"
+        component={SellerProductsScreen}
+        options={{ title: "Productos", tabBarIcon: (props) => <TabIcon name="cube-outline" {...props} /> }}
+      />
+      <Tab.Screen
+        name="SellerPromos"
+        component={SellerPromosScreen}
+        options={{ title: "Promociones", tabBarIcon: (props) => <TabIcon name="sparkles-outline" {...props} /> }}
+      />
+      <Tab.Screen
+        name="SellerBusiness"
+        component={SellerBusinessScreen}
+        options={{ title: "Mi negocio", tabBarIcon: (props) => <TabIcon name="storefront-outline" {...props} /> }}
+      />
+    </Tab.Navigator>
   );
 }
 
+const tabOptions = {
+  headerShown: false,
+  tabBarActiveTintColor: colors.primary,
+  tabBarInactiveTintColor: "#8B8B8B",
+  tabBarStyle: {
+    minHeight: 70,
+    paddingTop: 8,
+    paddingBottom: 10,
+    backgroundColor: colors.white,
+    borderTopWidth: 1,
+    borderTopColor: "#E8E2D8",
+  },
+  tabBarLabelStyle: {
+    fontSize: 12,
+    fontWeight: "850",
+  },
+};
+
 export default function App() {
   return (
-    <AuthProvider>
-      <NavigationContainer theme={theme}>
-        <RootNavigator />
-      </NavigationContainer>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <MercattoProvider>
+        <NavigationContainer theme={theme}>
+          <StatusBar style="dark" />
+          <Stack.Navigator screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="Splash" component={SplashScreen} />
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="ModeSelect" component={ModeSelectScreen} />
+            <Stack.Screen name="RegisterRole" component={RegisterRoleScreen} />
+            <Stack.Screen name="BuyerRegister" component={BuyerRegisterScreen} />
+            <Stack.Screen name="EntrepreneurRegister" component={EntrepreneurRegisterScreen} />
+            <Stack.Screen name="Verification" component={VerificationScreen} />
+            <Stack.Screen name="CitySelect" component={CitySelectScreen} />
+            <Stack.Screen name="BuyerTabs" component={BuyerTabs} />
+            <Stack.Screen name="EntrepreneurTabs" component={EntrepreneurTabs} />
+            <Stack.Screen name="BusinessDetail" component={BusinessDetailScreen} />
+            <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
+            <Stack.Screen name="Cart" component={CartScreen} />
+            <Stack.Screen name="Checkout" component={CheckoutScreen} />
+            <Stack.Screen name="OrderConfirmation" component={OrderConfirmationScreen} />
+            <Stack.Screen name="Favorites" component={FavoritesScreen} />
+            <Stack.Screen name="Address" component={AddressScreen} />
+            <Stack.Screen name="StateScreen" component={StateScreen} />
+          </Stack.Navigator>
+        </NavigationContainer>
+      </MercattoProvider>
+    </SafeAreaProvider>
   );
 }

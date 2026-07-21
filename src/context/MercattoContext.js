@@ -1,20 +1,31 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
 import {
-  businesses,
-  buyerOrders,
+  businesses as demoBusinesses,
   cities,
-  entrepreneurOrders,
-  products,
+  products as demoProducts,
 } from "../data/mercattoData";
 import {
   clearStoredToken,
   createAddress as createAddressRequest,
+  createOrder as createOrderRequest,
+  createProduct as createProductRequest,
+  createStore as createStoreRequest,
+  deleteProduct as deleteProductRequest,
   getAddresses,
+  getCachedProfile,
+  getMyOrders,
+  getMyStore,
+  getStoreProducts,
+  getStores,
   loginUser,
   logoutUser,
   registerUser as registerUserRequest,
   saveToken,
+  saveCachedProfile,
+  updateOrderStatus,
+  updateProduct as updateProductRequest,
+  updateStore as updateStoreRequest,
 } from "../../services/mercattoApi";
 
 const MercattoContext = createContext(null);
@@ -25,6 +36,12 @@ export function MercattoProvider({ children }) {
   const [mode, setMode] = useState("buyer");
   const [selectedCity, setSelectedCity] = useState(cities[0]);
   const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [businesses, setBusinesses] = useState(demoBusinesses);
+  const [products, setProducts] = useState(demoProducts);
+  const [myStore, setMyStore] = useState(null);
+  const [catalogSource, setCatalogSource] = useState("demo");
+  const [isCatalogLoading, setIsCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState("");
   const [favorites, setFavorites] = useState(["dulce-orilla"]);
   const [cart, setCart] = useState({
     businessId: null,
@@ -33,8 +50,47 @@ export function MercattoProvider({ children }) {
     paymentMethod: "Efectivo",
     coupon: "",
   });
-  const [orders, setOrders] = useState(buyerOrders);
-  const [sellerOrders, setSellerOrders] = useState(entrepreneurOrders);
+  const [orders, setOrders] = useState([]);
+  const [sellerOrders, setSellerOrders] = useState([]);
+
+  const refreshCatalog = async () => {
+    setIsCatalogLoading(true);
+    setCatalogError("");
+    try {
+      const storeResponse = await getStores();
+      const apiStores = storeResponse?.data || [];
+      if (!apiStores.length) {
+        setBusinesses(demoBusinesses);
+        setProducts(demoProducts);
+        setCatalogSource("demo");
+        return { businesses: demoBusinesses, products: demoProducts };
+      }
+
+      const nextBusinesses = apiStores.map(mapApiStore);
+      const productResponses = await Promise.all(
+        apiStores.map((store) => getStoreProducts(store.id)),
+      );
+      const nextProducts = productResponses.flatMap((response, index) =>
+        (response?.data || []).map((product) => mapApiProduct(product, apiStores[index])),
+      );
+      setBusinesses(nextBusinesses);
+      setProducts(nextProducts);
+      setCatalogSource("backend");
+      return { businesses: nextBusinesses, products: nextProducts };
+    } catch (error) {
+      setCatalogError(error?.message || "No pudimos actualizar el catálogo.");
+      setBusinesses(demoBusinesses);
+      setProducts(demoProducts);
+      setCatalogSource("demo");
+      return { businesses: demoBusinesses, products: demoProducts };
+    } finally {
+      setIsCatalogLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshCatalog();
+  }, []);
 
   const login = async ({ identifier, password }) => {
     const response = await loginUser({
@@ -43,21 +99,28 @@ export function MercattoProvider({ children }) {
     });
     await saveToken(response.token);
 
-    let addresses = [];
-    try {
-      const addressResponse = await getAddresses(response.token);
-      addresses = addressResponse?.data || [];
-    } catch {
-      addresses = [];
-    }
+    const [addressResult, storeResult, orderResult] = await Promise.allSettled([
+      getAddresses(response.token),
+      getMyStore(response.token),
+      getMyOrders(1, response.token),
+    ]);
+    const addresses = addressResult.status === "fulfilled" ? addressResult.value?.data || [] : [];
+    const apiStore = storeResult.status === "fulfilled" ? storeResult.value : null;
+    const apiOrders = orderResult.status === "fulfilled" ? orderResult.value?.data || [] : [];
 
     const defaultAddress = getDefaultAddress(addresses);
+    const cachedProfile = await getCachedProfile();
+    const matchingProfile =
+      cachedProfile?.ownerEmail === response.user?.email ? cachedProfile.profile : {};
     const nextUser = normalizeApiUser(response.user, {
-      profiles: ["buyer"],
+      ...matchingProfile,
+      profiles: apiStore ? ["buyer", "entrepreneur"] : ["buyer"],
       ...mapApiAddress(defaultAddress),
     });
     setUser(nextUser);
     setSavedAddresses(addresses);
+    setMyStore(apiStore ? mapApiStore(apiStore) : null);
+    setSellerOrders(apiOrders.map(mapApiOrder));
     if (nextUser.city) {
       setSelectedCity(nextUser.city);
     }
@@ -77,6 +140,23 @@ export function MercattoProvider({ children }) {
     });
     await saveToken(response.token);
 
+    let apiStore = null;
+    if (profileType === "entrepreneur") {
+      try {
+        apiStore = await createStoreRequest(
+          {
+            name: data.businessName || `${fullName} Store`,
+            description: data.shortDescription || data.about || null,
+            phone: data.businessPhone || data.phone || "Sin teléfono",
+            slug: createSlug(data.businessName || fullName),
+          },
+          response.token,
+        );
+      } catch {
+        apiStore = null;
+      }
+    }
+
     const nextUser = normalizeApiUser(response.user, {
       firstName: data.names || "Nuevo",
       lastName: data.lastNames || "Usuario",
@@ -94,7 +174,11 @@ export function MercattoProvider({ children }) {
     setSelectedCity(nextUser.city);
     setDeliveryAddress(nextUser.address || "");
     setSavedAddresses([]);
+    setMyStore(apiStore ? mapApiStore(apiStore) : null);
+    setSellerOrders([]);
     setMode(profileType === "entrepreneur" ? "entrepreneur" : "buyer");
+    await saveCachedProfile({ ownerEmail: nextUser.email, profile: nextUser });
+    if (apiStore) await refreshCatalog();
     return nextUser;
   };
 
@@ -112,6 +196,7 @@ export function MercattoProvider({ children }) {
     };
 
     setUser(nextUser);
+    saveCachedProfile({ ownerEmail: nextUser.email, profile: nextUser }).catch(() => {});
 
     if (patch.city) {
       setSelectedCity(patch.city);
@@ -141,6 +226,9 @@ export function MercattoProvider({ children }) {
   const logout = async () => {
     setUser(null);
     setSavedAddresses([]);
+    setMyStore(null);
+    setOrders([]);
+    setSellerOrders([]);
     setMode("buyer");
     setCart({ businessId: null, items: [], deliveryMode: "Delivery", paymentMethod: "Efectivo", coupon: "" });
     try {
@@ -231,29 +319,84 @@ export function MercattoProvider({ children }) {
     setCart({ businessId: null, items: [], deliveryMode: "Delivery", paymentMethod: "Efectivo", coupon: "" });
   };
 
-  const confirmOrder = () => {
+  const confirmOrder = async ({ customerPhone }) => {
     const business = businesses.find((item) => item.id === cart.businessId);
-    const total = cart.items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-    const nextOrder = {
-      id: `MCT-${Math.floor(1100 + Math.random() * 800)}`,
-      businessId: business?.id,
-      businessName: business?.name || "Mercatto",
-      date: "Ahora",
-      status: "Pedido enviado",
-      total: Number((total + (business?.deliveryCost || 0)).toFixed(2)),
-      deliveryMode: cart.deliveryMode,
-      eta: business?.deliveryTime || "30 min",
-      items: cart.items.map((item) => item.product.name),
-    };
+    if (!business?.isBackendEntity || cart.items.some((item) => !item.product.isBackendEntity)) {
+      const error = new Error(
+        "Este catálogo es demostrativo. Registra la tienda y sus productos en Laravel para crear pedidos reales.",
+      );
+      error.status = 409;
+      throw error;
+    }
+
+    const response = await createOrderRequest(business.id, {
+      customer_name: user?.name || "Cliente Mercatto",
+      customer_phone: customerPhone.trim(),
+      delivery_address: `${deliveryAddress}, ${selectedCity}`,
+      items: cart.items.map((item) => ({
+        product_id: item.product.id,
+        quantity: item.quantity,
+      })),
+    });
+    const nextOrder = mapApiOrder(response);
     setOrders((current) => [nextOrder, ...current]);
     clearCart();
     return nextOrder;
   };
 
-  const updateSellerOrder = (orderId, status) => {
+  const updateSellerOrder = async (orderId, status) => {
+    if (!myStore?.id) throw new Error("Primero debes registrar tu tienda.");
+    const apiStatus = orderStatusToApi[status] || status;
+    const response = await updateOrderStatus(myStore.id, orderId, apiStatus);
+    const nextOrder = mapApiOrder(response);
     setSellerOrders((current) =>
-      current.map((order) => (order.id === orderId ? { ...order, status } : order)),
+      current.map((order) => (order.id === orderId ? nextOrder : order)),
     );
+    return nextOrder;
+  };
+
+  const saveStore = async (payload) => {
+    const requestPayload = {
+      name: payload.name.trim(),
+      description: payload.description?.trim() || null,
+      phone: payload.phone.trim(),
+      slug: createSlug(payload.slug || payload.name),
+    };
+    const response = myStore?.id
+      ? await updateStoreRequest(myStore.id, requestPayload)
+      : await createStoreRequest(requestPayload);
+    const nextStore = mapApiStore(response);
+    setMyStore(nextStore);
+    await refreshCatalog();
+    return nextStore;
+  };
+
+  const addSellerProduct = async (payload) => {
+    if (!myStore?.id) throw new Error("Primero debes registrar tu tienda.");
+    const response = await createProductRequest(myStore.id, normalizeProductPayload(payload));
+    const nextProduct = mapApiProduct(response, myStore);
+    setProducts((current) => [nextProduct, ...current]);
+    return nextProduct;
+  };
+
+  const saveSellerProduct = async (productId, payload) => {
+    if (!myStore?.id) throw new Error("Primero debes registrar tu tienda.");
+    const response = await updateProductRequest(
+      myStore.id,
+      productId,
+      normalizeProductPayload(payload),
+    );
+    const nextProduct = mapApiProduct(response, myStore);
+    setProducts((current) =>
+      current.map((product) => (product.id === productId ? nextProduct : product)),
+    );
+    return nextProduct;
+  };
+
+  const removeSellerProduct = async (productId) => {
+    if (!myStore?.id) throw new Error("Primero debes registrar tu tienda.");
+    await deleteProductRequest(myStore.id, productId);
+    setProducts((current) => current.filter((product) => product.id !== productId));
   };
 
   const cartBusiness = businesses.find((business) => business.id === cart.businessId);
@@ -277,6 +420,10 @@ export function MercattoProvider({ children }) {
     sellerOrders,
     products,
     businesses,
+    myStore,
+    catalogSource,
+    isCatalogLoading,
+    catalogError,
     cartBusiness,
     cartSubtotal,
     cartDelivery,
@@ -298,6 +445,11 @@ export function MercattoProvider({ children }) {
     clearCart,
     confirmOrder,
     updateSellerOrder,
+    refreshCatalog,
+    saveStore,
+    addSellerProduct,
+    saveSellerProduct,
+    removeSellerProduct,
   };
 
   return <MercattoContext.Provider value={value}>{children}</MercattoContext.Provider>;
@@ -356,6 +508,123 @@ function mapApiAddress(address) {
       longitude: Number(address.longitude),
     },
   };
+}
+
+const orderStatusFromApi = {
+  PENDING: "Nuevo",
+  PROCESSING: "En preparación",
+  SHIPPED: "Enviado",
+  DELIVERED: "Entregado",
+  CANCELLED: "Cancelado",
+};
+
+const orderStatusToApi = {
+  Nuevo: "PENDING",
+  Confirmado: "PROCESSING",
+  "En preparación": "PROCESSING",
+  "Listo para retirar": "SHIPPED",
+  Enviado: "SHIPPED",
+  Entregado: "DELIVERED",
+  Cancelado: "CANCELLED",
+};
+
+function mapApiStore(store, index = 0) {
+  const entity = store?.data || store;
+  const visualFallback = demoBusinesses[index % demoBusinesses.length];
+  return {
+    ...visualFallback,
+    id: entity.id,
+    name: entity.name,
+    logo: getInitials(entity.name),
+    slug: entity.slug,
+    shortDescription: entity.description || "Emprendimiento local en Mercatto.",
+    about: entity.description || "Conoce los productos de este emprendimiento local.",
+    category: "Emprendimiento",
+    subcategory: "Catálogo local",
+    city: null,
+    address: "No registrada en el backend",
+    contact: entity.phone,
+    phone: entity.phone,
+    owner: entity.owner,
+    isBackendEntity: true,
+  };
+}
+
+function mapApiProduct(product, store) {
+  const entity = product?.data || product;
+  const visualFallback = demoProducts.find((item) => item.businessId === store?.id) || demoProducts[0];
+  const stock = Number(entity.stock || 0);
+  return {
+    ...visualFallback,
+    id: entity.id,
+    businessId: entity.store?.id || store?.id,
+    name: entity.name,
+    description: entity.description,
+    fullDescription: entity.description,
+    price: Number(entity.price || 0),
+    oldPrice: null,
+    discount: 0,
+    badges: entity.is_active === false ? ["Pausado"] : [],
+    availability: entity.is_active === false ? "No disponible" : stock <= 3 ? "Stock bajo" : "Disponible",
+    stock,
+    isActive: entity.is_active !== false,
+    store: entity.store || store,
+    isBackendEntity: true,
+  };
+}
+
+function mapApiOrder(order) {
+  const entity = order?.data || order;
+  const status = orderStatusFromApi[entity.status] || entity.status || "Nuevo";
+  const itemNames = (entity.items || []).map((item) => item.product?.name || "Producto");
+  return {
+    id: entity.id,
+    businessId: entity.store?.id,
+    businessName: entity.store?.name || "Mercatto",
+    buyer: entity.customer_name,
+    phone: entity.customer_phone,
+    address: entity.delivery_address,
+    date: formatApiDate(entity.created_at),
+    time: formatApiDate(entity.created_at),
+    status,
+    total: Number(entity.total_price || 0),
+    deliveryMode: "Delivery",
+    eta: "Por confirmar",
+    payment: "Por confirmar",
+    items: itemNames,
+    apiItems: entity.items || [],
+    isBackendEntity: true,
+  };
+}
+
+function normalizeProductPayload(payload) {
+  return {
+    name: payload.name.trim(),
+    description: payload.description.trim(),
+    price: Number(payload.price),
+    stock: Number.parseInt(payload.stock, 10),
+    is_active: payload.isActive !== false,
+  };
+}
+
+function createSlug(value) {
+  return String(value || "tienda")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function formatApiDate(value) {
+  if (!value) return "Ahora";
+  return new Intl.DateTimeFormat("es-EC", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 export function useMercatto() {

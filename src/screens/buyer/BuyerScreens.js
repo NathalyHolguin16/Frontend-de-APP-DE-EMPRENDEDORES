@@ -4,6 +4,8 @@ import { useState } from "react";
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import AddressMap from "../../components/address-map";
+import BirthDateField from "../../components/birth-date-field";
+import GenderSelector from "../../components/gender-selector";
 import {
   Avatar,
   BusinessCard,
@@ -20,7 +22,7 @@ import {
   SearchBar,
   SectionHeader,
 } from "../../components/MercattoUI";
-import { businesses, cities, products, promotions } from "../../data/mercattoData";
+import { cities, products as showcaseProducts, promotions } from "../../data/mercattoData";
 import { useMercatto } from "../../context/MercattoContext";
 import { colors, radius, shadows, spacing, typography } from "../../theme/mercattoTheme";
 
@@ -109,12 +111,13 @@ function getEditableProfileNames(user) {
 }
 
 export function BuyerHomeScreen({ navigation }) {
-  const { user, selectedCity, deliveryAddress, cart, favorites, toggleFavorite } = useMercatto();
+  const { businesses, catalogSource, user, selectedCity, deliveryAddress, cart, favorites, toggleFavorite } = useMercatto();
   const [query, setQuery] = useState("");
+  const visiblePromotions = catalogSource === "demo" ? promotions : [];
   const cartCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
   const filteredBusinesses = businesses.filter(
     (business) =>
-      business.city === selectedCity &&
+      (!business.city || business.city === selectedCity) &&
       `${business.name} ${business.category} ${business.shortDescription}`
         .toLowerCase()
         .includes(query.toLowerCase()),
@@ -175,9 +178,9 @@ export function BuyerHomeScreen({ navigation }) {
         ))}
       </ScrollView>
 
-      <SectionHeader title="Promos exclusivas" action="Ver promos" onPress={() => navigation.navigate("Promos")} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>
-        {promotions.map((promo) => {
+      {visiblePromotions.length ? <SectionHeader title="Promos exclusivas" action="Ver promos" onPress={() => navigation.navigate("Promos")} /> : null}
+      {visiblePromotions.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>
+        {visiblePromotions.map((promo) => {
           const business = businesses.find((item) => item.id === promo.businessId);
           return (
             <FeaturePromoCard
@@ -188,11 +191,11 @@ export function BuyerHomeScreen({ navigation }) {
             />
           );
         })}
-      </ScrollView>
+      </ScrollView> : null}
 
-      <SectionHeader title="Más ofertas para ti" action="Promos" onPress={() => navigation.navigate("Promos")} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>
-        {promotions.map((promo) => {
+      {visiblePromotions.length ? <SectionHeader title="Más ofertas para ti" action="Promos" onPress={() => navigation.navigate("Promos")} /> : null}
+      {visiblePromotions.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>
+        {visiblePromotions.map((promo) => {
           const business = businesses.find((item) => item.id === promo.businessId);
           return (
             <PromoCard
@@ -203,7 +206,7 @@ export function BuyerHomeScreen({ navigation }) {
             />
           );
         })}
-      </ScrollView>
+      </ScrollView> : null}
       {["Emprendimientos destacados", "Cerca de ti", "Nuevos en Mercatto"].map((title, index) => (
         <View key={title} style={{ gap: spacing.md }}>
           <SectionHeader title={title} />
@@ -246,9 +249,9 @@ function HeroDealCard({ navigation }) {
           <Text style={styles.heroPlusTwo}>+</Text>
           <Text style={styles.heroPlusThree}>+</Text>
         </View>
-        <Image source={{ uri: products[0].image }} style={[styles.heroProduct, styles.heroProductMain]} resizeMode="cover" />
-        <Image source={{ uri: products[2].image }} style={[styles.heroProduct, styles.heroProductSmall]} resizeMode="cover" />
-        <Image source={{ uri: products[3].image }} style={[styles.heroProduct, styles.heroProductTiny]} resizeMode="cover" />
+        <Image source={{ uri: showcaseProducts[0].image }} style={[styles.heroProduct, styles.heroProductMain]} resizeMode="cover" />
+        <Image source={{ uri: showcaseProducts[2].image }} style={[styles.heroProduct, styles.heroProductSmall]} resizeMode="cover" />
+        <Image source={{ uri: showcaseProducts[3].image }} style={[styles.heroProduct, styles.heroProductTiny]} resizeMode="cover" />
       </View>
       <View style={styles.heroPager} />
     </Pressable>
@@ -284,7 +287,7 @@ function FeaturePromoCard({ promo, businessName, onPress }) {
 }
 
 export function BusinessDetailScreen({ route, navigation }) {
-  const { favorites, toggleFavorite, addToCart } = useMercatto();
+  const { businesses, products, favorites, toggleFavorite, addToCart } = useMercatto();
   const business = businesses.find((item) => item.id === route.params?.businessId) || businesses[0];
   const businessProducts = products.filter((product) => product.businessId === business.id);
   const deliveryOptions = ["Delivery", "Retiro en local", "Punto de encuentro"].filter((option) =>
@@ -372,7 +375,7 @@ export function BusinessDetailScreen({ route, navigation }) {
 }
 
 export function ProductDetailScreen({ route, navigation }) {
-  const { addToCart } = useMercatto();
+  const { addToCart, businesses, products } = useMercatto();
   const product = products.find((item) => item.id === route.params?.productId) || products[0];
   const business = businesses.find((item) => item.id === product.businessId);
   const [quantity, setQuantity] = useState(1);
@@ -511,10 +514,30 @@ export function CartScreen({ navigation }) {
 }
 
 export function CheckoutScreen({ navigation }) {
-  const { cartBusiness, deliveryAddress, cart, cartSubtotal, cartDelivery, cartDiscount, cartTotal, confirmOrder } = useMercatto();
-  const submit = () => {
-    const order = confirmOrder();
-    navigation.replace("OrderConfirmation", { orderId: order.id });
+  const { user, cartBusiness, deliveryAddress, cart, cartSubtotal, cartDelivery, cartDiscount, cartTotal, confirmOrder } = useMercatto();
+  const [customerPhone, setCustomerPhone] = useState(user?.phone === "Pendiente" ? "" : user?.phone || "");
+  const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submit = async () => {
+    if (!deliveryAddress) {
+      setMessage("Configura una dirección de entrega antes de enviar el pedido.");
+      return;
+    }
+    if (!customerPhone.trim()) {
+      setMessage("Ingresa un número de contacto para el pedido.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setMessage("");
+    try {
+      const order = await confirmOrder({ customerPhone });
+      navigation.replace("OrderConfirmation", { orderId: order.id });
+    } catch (error) {
+      setMessage(error?.message || "No pudimos enviar el pedido. Intenta nuevamente.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   return (
     <Screen>
@@ -525,9 +548,22 @@ export function CheckoutScreen({ navigation }) {
         <InfoLine label="Modalidad" value={cart.deliveryMode} />
         <InfoLine label="Método de pago" value={cart.paymentMethod} />
         <InfoLine label="Tiempo estimado" value={cartBusiness?.deliveryTime} />
+        <Field
+          label="Teléfono de contacto"
+          placeholder="0991234567"
+          keyboardType="phone-pad"
+          value={customerPhone}
+          onChangeText={setCustomerPhone}
+        />
       </Card>
       <OrderSummary subtotal={cartSubtotal} delivery={cartDelivery} discount={cartDiscount} total={cartTotal} />
-      <PrimaryButton title="Enviar pedido" icon="send-outline" onPress={submit} />
+      {message ? <Text selectable style={styles.addressMessage}>{message}</Text> : null}
+      <PrimaryButton
+        title={isSubmitting ? "Enviando pedido..." : "Enviar pedido"}
+        icon="send-outline"
+        onPress={submit}
+        disabled={isSubmitting}
+      />
       <PrimaryButton title="Volver al carrito" variant="secondary" onPress={() => navigation.goBack()} />
     </Screen>
   );
@@ -548,9 +584,10 @@ export function OrderConfirmationScreen({ route, navigation }) {
 }
 
 export function PromosScreen({ navigation }) {
+  const { businesses, catalogSource } = useMercatto();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Todas");
-  const promoList = promotions.filter((promo) => {
+  const promoList = (catalogSource === "demo" ? promotions : []).filter((promo) => {
     const business = businesses.find((item) => item.id === promo.businessId);
     return (
       (category === "Todas" || promo.category === category) &&
@@ -702,7 +739,7 @@ export function BuyerProfileScreen({ navigation }) {
 }
 
 export function FavoritesScreen({ navigation }) {
-  const { favorites, toggleFavorite } = useMercatto();
+  const { businesses, favorites, toggleFavorite } = useMercatto();
   const list = businesses.filter((business) => favorites.includes(business.id));
   return (
     <Screen>
@@ -1009,15 +1046,14 @@ export function EditProfileScreen({ navigation }) {
       address: form.address.trim(),
       city: form.city,
     });
-    setMessage("Información actualizada correctamente.");
-    setTimeout(() => navigation.goBack(), 450);
+    setMessage("Cambios guardados en este dispositivo. Laravel aún no permite actualizar el perfil.");
   };
 
   return (
     <Screen>
       <Text style={typography.h1}>Editar información</Text>
       <Text style={typography.muted}>
-        Actualiza tus datos personales. En esta versión se guardan en el estado local de la app.
+        Tus cambios se conservarán en este dispositivo mientras Laravel incorpora la actualización del perfil.
       </Text>
       <Card>
         <Field label="Nombres" value={form.firstName} onChangeText={(value) => update("firstName", value)} placeholder="Ingresa tus nombres" />
@@ -1025,8 +1061,14 @@ export function EditProfileScreen({ navigation }) {
         <Field label="Correo electrónico" value={form.email} onChangeText={(value) => update("email", value)} placeholder="correo@ejemplo.com" />
         <Field label="Número celular" value={form.phone} onChangeText={(value) => update("phone", value)} placeholder="0991234567" />
         <Field label="Número de cédula" value={form.idNumber} onChangeText={(value) => update("idNumber", value)} placeholder="1312345678" />
-        <Field label="Fecha de nacimiento" value={form.birthDate} onChangeText={(value) => update("birthDate", value)} placeholder="AAAA-MM-DD" />
-        <Field label="Género" value={form.gender} onChangeText={(value) => update("gender", value)} placeholder="Femenino, masculino, otro" />
+        <BirthDateField
+          value={form.birthDate}
+          onChange={(value) => update("birthDate", value)}
+        />
+        <GenderSelector
+          value={form.gender}
+          onChange={(value) => update("gender", value)}
+        />
       </Card>
       <Card>
         <Text style={typography.h3}>Ciudad principal</Text>

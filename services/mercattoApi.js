@@ -1,6 +1,8 @@
 const fallbackBaseUrl = "https://mercatto-back.onrender.com";
 const authTokenKey = "mercatto_auth_token";
+const profileCacheKey = "mercatto_profile_cache";
 let webSessionToken = null;
+let webProfileCache = null;
 
 export const mercattoApiUrl = (
   process.env.EXPO_PUBLIC_MERCATTO_API_URL || fallbackBaseUrl
@@ -147,6 +149,32 @@ export async function clearStoredToken() {
   await SecureStore.deleteItemAsync(authTokenKey);
 }
 
+export async function saveCachedProfile(profile) {
+  const serialized = JSON.stringify(profile);
+  if (process.env.EXPO_OS === "web") {
+    webProfileCache = serialized;
+    return;
+  }
+
+  const SecureStore = await import("expo-secure-store");
+  await SecureStore.setItemAsync(profileCacheKey, serialized);
+}
+
+export async function getCachedProfile() {
+  let serialized = webProfileCache;
+  if (process.env.EXPO_OS !== "web") {
+    const SecureStore = await import("expo-secure-store");
+    serialized = await SecureStore.getItemAsync(profileCacheKey);
+  }
+
+  if (!serialized) return null;
+  try {
+    return JSON.parse(serialized);
+  } catch {
+    return null;
+  }
+}
+
 export async function registerUser(payload) {
   return request("/api/register", {
     method: "POST",
@@ -189,6 +217,88 @@ export async function createAddress(payload, token) {
 export async function deleteAddress(addressId, token) {
   return request(`/api/v1/client/addresses/${addressId}`, {
     method: "DELETE",
+    token,
+  });
+}
+
+export async function getStores(page = 1) {
+  return request(`/api/stores?page=${page}`);
+}
+
+export async function getStore(storeId) {
+  return request(`/api/stores/${storeId}`);
+}
+
+export async function getMyStore(token) {
+  return request("/api/my-store", { token });
+}
+
+export async function createStore(payload, token) {
+  return request("/api/stores", {
+    method: "POST",
+    body: payload,
+    token,
+  });
+}
+
+export async function updateStore(storeId, payload, token) {
+  return request(`/api/stores/${storeId}`, {
+    method: "PUT",
+    body: payload,
+    token,
+  });
+}
+
+export async function deleteStore(storeId, token) {
+  return request(`/api/stores/${storeId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function getStoreProducts(storeId, page = 1) {
+  return request(`/api/stores/${storeId}/products?page=${page}`);
+}
+
+export async function createProduct(storeId, payload, token) {
+  return request(`/api/stores/${storeId}/products`, {
+    method: "POST",
+    body: payload,
+    token,
+  });
+}
+
+export async function updateProduct(storeId, productId, payload, token) {
+  return request(`/api/stores/${storeId}/products/${productId}`, {
+    method: "PUT",
+    body: payload,
+    token,
+  });
+}
+
+export async function deleteProduct(storeId, productId, token) {
+  return request(`/api/stores/${storeId}/products/${productId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function createOrder(storeId, payload, token) {
+  return request(`/api/stores/${storeId}/orders`, {
+    method: "POST",
+    body: payload,
+    token,
+  });
+}
+
+export async function getMyOrders(page = 1, token) {
+  return request(`/api/my-orders?page=${page}`, { token });
+}
+
+export async function updateOrderStatus(storeId, orderId, status, token) {
+  return request(`/api/stores/${storeId}/orders/${orderId}`, {
+    method: "PATCH",
+    body: { status },
     token,
   });
 }

@@ -19,6 +19,8 @@ import {
     Screen,
     SearchBar,
 } from "../../components/MercattoUI";
+import BirthDateField from "../../components/birth-date-field";
+import GenderSelector from "../../components/gender-selector";
 import { useMercatto } from "../../context/MercattoContext";
 import { cities, formSteps } from "../../data/mercattoData";
 import {
@@ -422,24 +424,44 @@ export function EntrepreneurRegisterScreen({ navigation }) {
         <View style={[styles.progressBar, { width: `${progress}%` }]} />
       </View>
       <Card>
-        {fieldsByStep[step].map(([key, label]) => (
-          <Field
-            key={key}
-            label={label}
-            placeholder={placeholderFor(label)}
-            value={data[key] || ""}
-            onChangeText={(value) => update(key, value)}
-            multiline={[
-              "about",
-              "coverage",
-              "delivery",
-              "changes",
-              "returns",
-              "custom",
-              "review",
-            ].includes(key)}
-          />
-        ))}
+        {fieldsByStep[step].map(([key, label]) => {
+          if (key === "birthDate") {
+            return (
+              <BirthDateField
+                key={key}
+                value={data.birthDate || ""}
+                onChange={(value) => update("birthDate", value)}
+              />
+            );
+          }
+          if (key === "gender") {
+            return (
+              <GenderSelector
+                key={key}
+                value={data.gender || ""}
+                onChange={(value) => update("gender", value)}
+              />
+            );
+          }
+          return (
+            <Field
+              key={key}
+              label={label}
+              placeholder={placeholderFor(label)}
+              value={data[key] || ""}
+              onChangeText={(value) => update(key, value)}
+              multiline={[
+                "about",
+                "coverage",
+                "delivery",
+                "changes",
+                "returns",
+                "custom",
+                "review",
+              ].includes(key)}
+            />
+          );
+        })}
         {step === 0 ? (
           <>
             <PasswordPair data={data} update={update} />

@@ -1,11 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import {
   Avatar,
   Card,
   Chip,
+  EmptyState,
   Field,
   IconButton,
   PrimaryButton,
@@ -14,17 +15,14 @@ import {
   SectionHeader,
 } from "../../components/MercattoUI";
 import {
-  businesses,
   entrepreneurProfile,
   entrepreneurStats,
-  products,
-  promotions,
 } from "../../data/mercattoData";
 import { useMercatto } from "../../context/MercattoContext";
 import { colors, radius, shadows, spacing, typography } from "../../theme/mercattoTheme";
 
 export function EntrepreneurDashboardScreen({ navigation }) {
-  const { logout, setMode } = useMercatto();
+  const { logout, myStore, setMode } = useMercatto();
   const [open, setOpen] = useState(true);
   const handleLogout = () => {
     logout();
@@ -36,7 +34,7 @@ export function EntrepreneurDashboardScreen({ navigation }) {
         <View style={styles.heroTop}>
           <Avatar label="DO" size={68} />
           <View style={{ flex: 1 }}>
-            <Text style={[typography.h2, { color: colors.white }]}>{entrepreneurProfile.name}</Text>
+            <Text style={[typography.h2, { color: colors.white }]}>{myStore?.name || entrepreneurProfile.name}</Text>
             <Text style={[typography.muted, { color: "#EDE6DB" }]}>Perfil completado al {entrepreneurProfile.completion}%</Text>
           </View>
           <Chip label={open ? "Abierto" : "Pausado"} tone={open ? "#E9F7EF" : "#FCEDEA"} />
@@ -82,7 +80,7 @@ export function EntrepreneurDashboardScreen({ navigation }) {
             onPress={() => {
               if (route === "preview") {
                 setMode("buyer");
-                navigation.getParent()?.replace?.("BusinessDetail", { businessId: "dulce-orilla" });
+                navigation.getParent()?.replace?.("BusinessDetail", { businessId: myStore?.id });
               } else {
                 navigation.navigate(route);
               }
@@ -106,13 +104,27 @@ export function EntrepreneurDashboardScreen({ navigation }) {
 
 export function SellerOrdersScreen() {
   const { sellerOrders, updateSellerOrder } = useMercatto();
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
+  const [message, setMessage] = useState("");
   const statuses = ["Nuevo", "Confirmado", "En preparación", "Listo para retirar", "Enviado", "Entregado", "Cancelado"];
+  const changeStatus = async (orderId, status) => {
+    setUpdatingOrderId(orderId);
+    setMessage("");
+    try {
+      await updateSellerOrder(orderId, status);
+    } catch (error) {
+      setMessage(error?.message || "No pudimos actualizar el pedido.");
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
   return (
     <Screen>
       <Text style={typography.h1}>Pedidos del negocio</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>
         {statuses.map((status) => <Chip key={status} label={status} />)}
       </ScrollView>
+      {message ? <Text selectable style={styles.warning}>{message}</Text> : null}
       {sellerOrders.map((order) => (
         <Card key={order.id}>
           <View style={styles.headerLine}>
@@ -130,12 +142,12 @@ export function SellerOrdersScreen() {
           <View style={styles.actionWrap}>
             {order.status === "Nuevo" ? (
               <>
-                <PrimaryButton title="Aceptar" onPress={() => updateSellerOrder(order.id, "Confirmado")} style={{ flex: 1 }} />
-                <PrimaryButton title="Rechazar" variant="secondary" onPress={() => updateSellerOrder(order.id, "Cancelado")} style={{ flex: 1 }} />
+                <PrimaryButton title="Aceptar" disabled={updatingOrderId === order.id} onPress={() => changeStatus(order.id, "Confirmado")} style={{ flex: 1 }} />
+                <PrimaryButton title="Rechazar" disabled={updatingOrderId === order.id} variant="secondary" onPress={() => changeStatus(order.id, "Cancelado")} style={{ flex: 1 }} />
               </>
             ) : (
               <>
-                <PrimaryButton title="Cambiar estado" onPress={() => updateSellerOrder(order.id, nextStatus(order.status))} style={{ flex: 1 }} />
+                <PrimaryButton title="Cambiar estado" disabled={updatingOrderId === order.id} onPress={() => changeStatus(order.id, nextStatus(order.status))} style={{ flex: 1 }} />
                 <PrimaryButton title="Contactar" variant="secondary" onPress={() => Alert.alert("Contacto", `Llamando a ${order.phone}`)} style={{ flex: 1 }} />
               </>
             )}
@@ -143,140 +155,231 @@ export function SellerOrdersScreen() {
           <PrimaryButton title="Ver ubicación o comprobante" variant="ghost" onPress={() => Alert.alert("Comprobante", "Vista simulada para imprimir o compartir.")} />
         </Card>
       ))}
+      {!sellerOrders.length ? (
+        <EmptyState
+          icon="receipt-outline"
+          title="Sin pedidos"
+          message="Los pedidos creados para tu tienda aparecerán aquí."
+        />
+      ) : null}
     </Screen>
   );
 }
 
 export function SellerProductsScreen() {
-  const sellerProducts = products.filter((product) => product.businessId === "dulce-orilla");
+  const {
+    products,
+    myStore,
+    addSellerProduct,
+    saveSellerProduct,
+    removeSellerProduct,
+  } = useMercatto();
+  const emptyForm = { name: "", description: "", price: "", stock: "", isActive: true };
+  const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState(null);
+  const [message, setMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const sellerProducts = products.filter(
+    (product) => product.businessId === myStore?.id && product.isBackendEntity,
+  );
+  const updateForm = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const editProduct = (product) => {
+    setEditingId(product.id);
+    setForm({
+      name: product.name,
+      description: product.description,
+      price: String(product.price),
+      stock: String(product.stock),
+      isActive: product.isActive,
+    });
+  };
+  const submit = async () => {
+    if (!form.name.trim() || !form.description.trim() || !form.price || !form.stock) {
+      setMessage("Completa nombre, descripción, precio y stock.");
+      return;
+    }
+    setIsSaving(true);
+    setMessage("");
+    try {
+      if (editingId) {
+        await saveSellerProduct(editingId, form);
+      } else {
+        await addSellerProduct(form);
+      }
+      setForm(emptyForm);
+      setEditingId(null);
+      setMessage(editingId ? "Producto actualizado en Laravel." : "Producto creado en Laravel.");
+    } catch (error) {
+      setMessage(error?.message || "No pudimos guardar el producto.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  const toggleProduct = async (product) => {
+    try {
+      await saveSellerProduct(product.id, {
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        stock: product.stock,
+        isActive: !product.isActive,
+      });
+    } catch (error) {
+      setMessage(error?.message || "No pudimos cambiar la disponibilidad.");
+    }
+  };
+  const confirmDelete = (product) => {
+    Alert.alert("Eliminar producto", `¿Deseas eliminar ${product.name}?`, [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Eliminar",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await removeSellerProduct(product.id);
+          } catch (error) {
+            setMessage(error?.message || "No pudimos eliminar el producto.");
+          }
+        },
+      },
+    ]);
+  };
   return (
     <Screen>
       <View style={styles.headerLine}>
         <View>
           <Text style={typography.h1}>Productos</Text>
-          <Text style={typography.muted}>Administra catálogo, stock, variaciones y disponibilidad.</Text>
+          <Text style={typography.muted}>Administra el catálogo y stock guardados en Laravel.</Text>
         </View>
-        <IconButton icon="add" color={colors.white} style={{ backgroundColor: colors.primary }} onPress={() => Alert.alert("Agregar producto", "Formulario simulado listo para conectarse.")} />
+        <IconButton
+          icon="add"
+          color={colors.white}
+          style={{ backgroundColor: colors.primary }}
+          onPress={() => {
+            setEditingId(null);
+            setForm(emptyForm);
+          }}
+        />
       </View>
+      <Card style={styles.formCard}>
+        <Text style={typography.h3}>{editingId ? "Editar producto" : "Nuevo producto"}</Text>
+        <Field label="Nombre" value={form.name} onChangeText={(value) => updateForm("name", value)} />
+        <Field label="Descripción" value={form.description} onChangeText={(value) => updateForm("description", value)} multiline />
+        <Field label="Precio" keyboardType="decimal-pad" value={form.price} onChangeText={(value) => updateForm("price", value)} />
+        <Field label="Stock" keyboardType="number-pad" value={form.stock} onChangeText={(value) => updateForm("stock", value)} />
+        {message ? <Text selectable style={styles.warning}>{message}</Text> : null}
+        <PrimaryButton
+          title={isSaving ? "Guardando..." : editingId ? "Actualizar producto" : "Crear producto"}
+          disabled={isSaving || !myStore}
+          onPress={submit}
+        />
+      </Card>
       {sellerProducts.map((product) => (
         <Card key={product.id}>
           <ProductCard product={product} onPress={() => null} onAdd={() => null} />
           <View style={styles.tagWrap}>
-            {["Editar", "Duplicar", "Ocultar", "Pausar", "Agotado"].map((action) => (
-              <Chip key={action} label={action} onPress={() => Alert.alert(action, `${action} producto en maqueta.`)} />
-            ))}
+            <Chip label="Editar" onPress={() => editProduct(product)} />
+            <Chip label={product.isActive ? "Pausar" : "Activar"} onPress={() => toggleProduct(product)} />
+            <Chip label="Eliminar" onPress={() => confirmDelete(product)} />
           </View>
-          <InfoLine label="Stock" value={product.availability === "Stock bajo" ? "3 unidades" : "18 unidades"} />
+          <InfoLine label="Stock" value={`${product.stock} unidades`} />
           <InfoLine label="Preparación" value={product.prepTime} />
           <InfoLine label="Variaciones" value={product.variants.join(", ")} />
           <InfoLine label="Complementos" value={product.complements.join(", ")} />
         </Card>
       ))}
-      <Card>
-        <Text style={typography.h3}>Control de inventario</Text>
-        <Text style={typography.muted}>Alertas de stock bajo, productos agotados, límite por pedido, activación por días y pausa de catálogo.</Text>
-      </Card>
+      {myStore && !sellerProducts.length ? (
+        <EmptyState
+          icon="cube-outline"
+          title="Sin productos"
+          message="Crea el primer producto para publicarlo en tu catálogo."
+        />
+      ) : null}
+      {!myStore ? <Text style={styles.warning}>Registra tu tienda antes de crear productos.</Text> : null}
     </Screen>
   );
 }
 
 export function SellerPromosScreen() {
-  const sellerPromos = promotions.filter((promo) => promo.businessId === "dulce-orilla");
   return (
     <Screen>
-      <View style={styles.headerLine}>
-        <View>
-          <Text style={typography.h1}>Promociones</Text>
-          <Text style={typography.muted}>Crea descuentos, combos, cupones, 2x1 y envío gratis.</Text>
-        </View>
-        <IconButton icon="add" color={colors.white} style={{ backgroundColor: colors.primary }} onPress={() => Alert.alert("Crear promoción", "Formulario simulado listo.")} />
-      </View>
-      <Card style={styles.formCard}>
-        <Text style={typography.h3}>Nueva promoción rápida</Text>
-        <Field label="Nombre" placeholder="Combo familiar" value="" onChangeText={() => null} />
-        <Field label="Descripción" placeholder="Describe las condiciones" value="" onChangeText={() => null} multiline />
-        <View style={styles.tagWrap}>
-          {["% descuento", "Precio especial", "Combo", "2x1", "Cupón", "Envío gratis"].map((item) => <Chip key={item} label={item} />)}
-        </View>
-        <PrimaryButton title="Guardar borrador" variant="secondary" onPress={() => Alert.alert("Borrador", "Promoción guardada en maqueta.")} />
-      </Card>
-      {sellerPromos.map((promo) => (
-        <Card key={promo.id}>
-          <Image source={{ uri: promo.image }} style={styles.promoImage} resizeMode="cover" />
-          <Text style={typography.h3}>{promo.name}</Text>
-          <InfoLine label="Precio normal" value={`$${promo.oldPrice.toFixed(2)}`} />
-          <InfoLine label="Promocional" value={`$${promo.price.toFixed(2)} · ${promo.discount}%`} />
-          <InfoLine label="Vigencia" value={promo.validity} />
-          <InfoLine label="Condiciones" value={promo.conditions} />
-          <View style={styles.actionWrap}>
-            <PrimaryButton title="Editar" style={{ flex: 1 }} onPress={() => null} />
-            <PrimaryButton title="Pausar" variant="secondary" style={{ flex: 1 }} onPress={() => null} />
-          </View>
-        </Card>
-      ))}
+      <Text style={typography.h1}>Promociones</Text>
+      <EmptyState
+        icon="pricetag-outline"
+        title="Pendiente de backend"
+        message="Laravel todavía no ofrece endpoints para crear, editar o pausar promociones."
+      />
     </Screen>
   );
 }
 
 export function SellerBusinessScreen({ navigation }) {
-  const { logout } = useMercatto();
-  const business = businesses[0];
+  const { logout, myStore, saveStore } = useMercatto();
   const [form, setForm] = useState({
-    name: entrepreneurProfile.name,
-    about: entrepreneurProfile.about,
-    phone: entrepreneurProfile.phone,
-    whatsapp: entrepreneurProfile.whatsapp,
-    website: entrepreneurProfile.website,
-    policies: entrepreneurProfile.policies,
-    address: entrepreneurProfile.address,
+    name: myStore?.name || "",
+    description: myStore?.shortDescription || "",
+    phone: myStore?.phone || "",
+    slug: myStore?.slug || "",
   });
+  const [message, setMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  useEffect(() => {
+    if (!myStore) return;
+    setForm({
+      name: myStore.name || "",
+      description: myStore.shortDescription || "",
+      phone: myStore.phone || "",
+      slug: myStore.slug || "",
+    });
+  }, [myStore]);
+  const submit = async () => {
+    if (!form.name.trim() || !form.phone.trim()) {
+      setMessage("Completa el nombre y teléfono del negocio.");
+      return;
+    }
+    setIsSaving(true);
+    setMessage("");
+    try {
+      await saveStore(form);
+      setMessage("Información guardada en Laravel.");
+    } catch (error) {
+      setMessage(error?.message || "No pudimos guardar el negocio.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  const business = myStore;
   return (
     <Screen>
       <Text style={typography.h1}>Mi negocio</Text>
       <Text style={typography.muted}>
         Esta plantilla editable define exactamente lo que verá el comprador en el perfil del emprendimiento.
       </Text>
-      <Card>
+      {business ? <Card>
         <Image source={{ uri: business.cover }} style={styles.coverPreview} resizeMode="cover" />
         <View style={styles.businessInline}>
           <Avatar label={business.logo} size={64} />
           <View style={{ flex: 1 }}>
-            <Text style={typography.h3}>Logo, portada y producto estrella</Text>
-            <Text style={typography.muted}>Previsualizar, reemplazar, eliminar, reordenar y validar resolución.</Text>
+            <Text style={typography.h3}>{business.name}</Text>
+            <Text style={typography.muted}>Tienda sincronizada con Mercatto.</Text>
           </View>
         </View>
-      </Card>
+      </Card> : null}
       <Card>
         <Field label="Nombre" value={form.name} onChangeText={(value) => update("name", value)} />
-        <Field label="Descripción corta" value={business.shortDescription} onChangeText={() => null} multiline />
-        <Field label="Conoce más sobre nosotros" value={form.about} onChangeText={(value) => update("about", value)} multiline />
-        <Field label="Categoría" value={business.category} onChangeText={() => null} />
-        <Field label="Subcategoría" value={business.subcategory} onChangeText={() => null} />
+        <Field label="Descripción" value={form.description} onChangeText={(value) => update("description", value)} multiline />
         <Field label="Número de contacto" value={form.phone} onChangeText={(value) => update("phone", value)} />
-        <Field label="WhatsApp" value={form.whatsapp} onChangeText={(value) => update("whatsapp", value)} />
-        <Field label="Redes sociales" value={business.socials} onChangeText={() => null} />
-        <Field label="Sitio web" value={form.website} onChangeText={(value) => update("website", value)} />
+        <Field label="Identificador web" value={form.slug} onChangeText={(value) => update("slug", value)} />
+        {message ? <Text selectable style={styles.warning}>{message}</Text> : null}
       </Card>
-      <Card>
-        <Text style={typography.h3}>Operación y entrega</Text>
-        <InfoLine label="Horarios" value={business.schedule} />
-        <InfoLine label="Ciudad" value={business.city} />
-        <InfoLine label="Dirección" value={form.address} />
-        <InfoLine label="Modalidad" value={business.modality.join(", ")} />
-        <InfoLine label="Opciones de entrega" value="Delivery, retiro y punto de encuentro" />
-        <InfoLine label="Costo de envío" value={`$${business.deliveryCost.toFixed(2)}`} />
-        <InfoLine label="Pedido mínimo" value={`$${business.minimumOrder.toFixed(2)}`} />
-        <InfoLine label="Métodos de pago" value={business.paymentMethods.join(", ")} />
-        <InfoLine label="Zonas de cobertura" value="Centro, Tarqui, Los Esteros, Barbasquillo" />
-      </Card>
-      <Card>
-        <Text style={typography.h3}>Políticas y disponibilidad</Text>
-        <Field label="Políticas" value={form.policies} onChangeText={(value) => update("policies", value)} multiline />
-        <Text style={typography.muted}>Incluye cierre temporal, vacaciones, feriados, pausa de pedidos y tiempo adicional por alta demanda.</Text>
-      </Card>
-      <PrimaryButton title="Vista previa como comprador" icon="eye-outline" onPress={() => navigation.getParent()?.navigate("BusinessDetail", { businessId: "dulce-orilla" })} />
-      <PrimaryButton title="Guardar cambios" variant="secondary" onPress={() => Alert.alert("Guardado", "Información del negocio actualizada en maqueta.")} />
+      {business ? <PrimaryButton title="Vista previa como comprador" icon="eye-outline" onPress={() => navigation.getParent()?.navigate("BusinessDetail", { businessId: business.id })} /> : null}
+      <PrimaryButton
+        title={isSaving ? "Guardando..." : business ? "Guardar cambios" : "Crear tienda"}
+        variant="secondary"
+        disabled={isSaving}
+        onPress={submit}
+      />
       <Card style={styles.logoutCard}>
         <Text style={typography.h3}>Sesión del emprendedor</Text>
         <Text style={typography.muted}>

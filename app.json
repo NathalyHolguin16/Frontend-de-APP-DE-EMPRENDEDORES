@@ -27,6 +27,12 @@
     },
     "plugins": [
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Mercatto usa tu ubicación para encontrar y confirmar la dirección de entrega."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",

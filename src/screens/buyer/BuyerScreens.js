@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import { useState } from "react";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import AddressMap from "../../components/address-map";
 import {
   Avatar,
   BusinessCard,
@@ -48,6 +50,52 @@ const categoryShowcase = [
     image: "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=700&q=80",
   },
 ];
+
+const cityCoordinates = {
+  Manta: { latitude: -0.9677, longitude: -80.7089 },
+  Portoviejo: { latitude: -1.0546, longitude: -80.4545 },
+  Guayaquil: { latitude: -2.171, longitude: -79.9224 },
+  Quito: { latitude: -0.1807, longitude: -78.4678 },
+  Cuenca: { latitude: -2.9001, longitude: -79.0059 },
+  Loja: { latitude: -3.9931, longitude: -79.2042 },
+  Ambato: { latitude: -1.2491, longitude: -78.6168 },
+  "Santo Domingo": { latitude: -0.253, longitude: -79.1754 },
+};
+
+function matchMercattoCity(place) {
+  const placeNames = [place.city, place.district, place.subregion, place.region]
+    .filter(Boolean)
+    .map((value) =>
+      value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(),
+    );
+
+  return cities.find((city) => {
+    const normalizedCity = city
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+    return placeNames.some(
+      (placeName) => placeName.includes(normalizedCity) || normalizedCity.includes(placeName),
+    );
+  });
+}
+
+function getEditableProfileNames(user) {
+  const explicitFirstName = String(user?.firstName || user?.names || "").trim();
+  const explicitLastName = String(user?.lastName || user?.lastNames || "").trim();
+  const fullName = String(user?.name || "").trim();
+  const isGenericName = ["usuario mercatto", "nuevo usuario"].includes(
+    fullName.toLowerCase(),
+  );
+  const [nameFromFullName = "", ...lastNameParts] = isGenericName
+    ? []
+    : fullName.split(/\s+/).filter(Boolean);
+
+  return {
+    firstName: explicitFirstName || nameFromFullName,
+    lastName: explicitLastName || lastNameParts.join(" "),
+  };
+}
 
 export function BuyerHomeScreen({ navigation }) {
   const { user, selectedCity, deliveryAddress, cart, favorites, toggleFavorite } = useMercatto();
@@ -661,29 +709,197 @@ export function FavoritesScreen({ navigation }) {
 }
 
 export function AddressScreen({ navigation }) {
-  const { deliveryAddress, selectedCity, setDeliveryAddress, setSelectedCity } = useMercatto();
+  const { deliveryAddress, selectedCity, updateUserProfile, user } = useMercatto();
   const [address, setAddress] = useState(deliveryAddress);
   const [city, setCity] = useState(selectedCity);
-  const [sector, setSector] = useState("Centro");
-  const [reference, setReference] = useState("Casa color blanco, portón negro");
+  const [detectedSector, setDetectedSector] = useState(user?.addressSector || "");
+  const [reference, setReference] = useState(user?.addressReference || "");
+  const [message, setMessage] = useState("");
+  const [coordinates, setCoordinates] = useState(
+    cityCoordinates[selectedCity] || cityCoordinates.Manta,
+  );
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationConfirmed, setLocationConfirmed] = useState(Boolean(deliveryAddress));
+
+  const selectCity = (nextCity) => {
+    if (nextCity === city) return;
+
+    setCity(nextCity);
+    setCoordinates(cityCoordinates[nextCity] || cityCoordinates.Manta);
+    setAddress("");
+    setDetectedSector("");
+    setReference("");
+    setLocationConfirmed(false);
+    setMessage(`Busca una dirección o mueve el mapa dentro de ${nextCity}.`);
+  };
+
+  const applyGeocodedAddress = (place, fallbackCity = city) => {
+    const detectedCity = matchMercattoCity(place) || fallbackCity;
+    const streetAddress = [place.street || place.name, place.streetNumber]
+      .filter(Boolean)
+      .join(" ");
+
+    setCity(detectedCity);
+    setAddress(streetAddress || place.formattedAddress || "");
+    setDetectedSector(place.district || place.subregion || "");
+    setLocationConfirmed(true);
+    setMessage(`Punto de entrega ubicado en ${detectedCity}.`);
+  };
+
+  const resolveMapPoint = async (nextCoordinates) => {
+    setCoordinates(nextCoordinates);
+    setIsLocating(true);
+
+    try {
+      const [place] = await Location.reverseGeocodeAsync(nextCoordinates);
+      if (place) {
+        applyGeocodedAddress(place);
+      } else {
+        setLocationConfirmed(false);
+        setMessage("No pudimos reconocer esa dirección. Prueba con otro punto cercano.");
+      }
+    } catch {
+      setLocationConfirmed(false);
+      setMessage("No pudimos consultar la dirección de ese punto.");
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
+  const useCurrentLocation = async () => {
+    setIsLocating(true);
+    setMessage("Buscando tu ubicación actual...");
+
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") {
+        setMessage("Activa el permiso de ubicación para usar tu posición actual.");
+        return;
+      }
+
+      const current = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      await resolveMapPoint({
+        latitude: current.coords.latitude,
+        longitude: current.coords.longitude,
+      });
+    } catch {
+      setMessage("No pudimos obtener tu ubicación. Puedes buscar la dirección manualmente.");
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
+  const searchAddress = async () => {
+    if (!address.trim()) {
+      setMessage("Escribe una calle o dirección para buscarla en el mapa.");
+      return;
+    }
+
+    setIsLocating(true);
+    setMessage("Buscando la dirección...");
+
+    try {
+      if (process.env.EXPO_OS === "android") {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (permission.status !== "granted") {
+          setMessage("Android necesita el permiso de ubicación para buscar direcciones.");
+          return;
+        }
+      }
+
+      const results = await Location.geocodeAsync(`${address.trim()}, ${city}, Ecuador`);
+      if (!results.length) {
+        setLocationConfirmed(false);
+        setMessage("No encontramos esa dirección. Revisa la calle y la ciudad.");
+        return;
+      }
+
+      const nextCoordinates = {
+        latitude: results[0].latitude,
+        longitude: results[0].longitude,
+      };
+      setCoordinates(nextCoordinates);
+      setLocationConfirmed(true);
+      setMessage(`Dirección encontrada en ${city}. Ajusta el pin si hace falta.`);
+    } catch {
+      setLocationConfirmed(false);
+      setMessage("No pudimos buscar la dirección ahora. Intenta nuevamente.");
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
+  const saveAddress = () => {
+    if (!address.trim()) {
+      setMessage("Selecciona o busca una dirección antes de guardar.");
+      return;
+    }
+
+    if (!locationConfirmed) {
+      setMessage("Busca la dirección o confirma el punto en el mapa antes de guardar.");
+      return;
+    }
+
+    updateUserProfile({
+      city,
+      address: address.trim(),
+      addressSector: detectedSector.trim(),
+      addressReference: reference.trim(),
+      addressCoordinates: coordinates,
+    });
+    navigation.goBack();
+  };
+
   return (
     <Screen>
       <Text style={typography.h1}>Dirección de entrega</Text>
       <Card>
-        <Text style={typography.h3}>Ciudad</Text>
+        <Field
+          label="Buscar dirección"
+          value={address}
+          onChangeText={(value) => {
+            setAddress(value);
+            setLocationConfirmed(false);
+          }}
+          placeholder="Calle, avenida o lugar"
+        />
+        <View style={styles.addressActions}>
+          <PrimaryButton
+            title="Buscar en mapa"
+            icon="search-outline"
+            variant="secondary"
+            onPress={searchAddress}
+            disabled={isLocating}
+            style={styles.addressActionButton}
+          />
+          <PrimaryButton
+            title="Usar mi ubicación"
+            icon="locate-outline"
+            variant="secondary"
+            onPress={useCurrentLocation}
+            disabled={isLocating}
+            style={styles.addressActionButton}
+          />
+        </View>
+        <View style={styles.mapHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={typography.h3}>Confirma el punto de entrega</Text>
+            <Text style={typography.muted}>Mueve el mapa hasta dejar el pin sobre la entrada.</Text>
+          </View>
+          {isLocating ? <ActivityIndicator color={colors.primaryDark} /> : null}
+        </View>
+        <AddressMap coordinates={coordinates} onCoordinateChange={resolveMapPoint} />
+        <Text style={typography.h3}>Ciudad detectada</Text>
         <View style={styles.tagWrap}>
           {cities.slice(0, 8).map((item) => (
-            <Chip key={item} label={item} selected={city === item} onPress={() => setCity(item)} />
+            <Chip key={item} label={item} selected={city === item} onPress={() => selectCity(item)} />
           ))}
         </View>
-        <Field label="Dirección" value={address} onChangeText={setAddress} placeholder="Calle principal y secundaria" />
-        <Field label="Sector" value={sector} onChangeText={setSector} placeholder="Sector o barrio" />
-        <Field label="Referencia" value={reference} onChangeText={setReference} placeholder="Referencia visible para entrega" multiline />
-        <Card style={{ backgroundColor: colors.softOrange }}>
-          <Text style={typography.h3}>Ubicación en mapa</Text>
-          <Text style={typography.muted}>Mapa simulado. Más adelante se conectará con geolocalización.</Text>
-        </Card>
-        <PrimaryButton title="Guardar dirección" onPress={() => { setSelectedCity(city); setDeliveryAddress(address); navigation.goBack(); }} />
+        <Field label="Referencia (opcional)" value={reference} onChangeText={setReference} placeholder="Casa, edificio o punto visible" multiline />
+        {message ? <Text selectable style={styles.addressMessage}>{message}</Text> : null}
+        <PrimaryButton title="Confirmar dirección" icon="checkmark-circle-outline" onPress={saveAddress} disabled={isLocating} />
       </Card>
     </Screen>
   );
@@ -691,9 +907,10 @@ export function AddressScreen({ navigation }) {
 
 export function EditProfileScreen({ navigation }) {
   const { user, selectedCity, deliveryAddress, updateUserProfile } = useMercatto();
+  const initialNames = getEditableProfileNames(user);
   const [form, setForm] = useState({
-    firstName: user?.firstName || "",
-    lastName: user?.lastName || "",
+    firstName: initialNames.firstName,
+    lastName: initialNames.lastName,
     email: user?.email || "",
     phone: user?.phone === "Pendiente" ? "" : user?.phone || "",
     idNumber: user?.idNumber === "Pendiente" ? "" : user?.idNumber || "",
@@ -704,10 +921,21 @@ export function EditProfileScreen({ navigation }) {
   });
   const [message, setMessage] = useState("");
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const selectProfileCity = (city) => {
+    setForm((current) =>
+      current.city === city ? current : { ...current, city, address: "" },
+    );
+    setMessage(`Ingresa una dirección principal válida en ${city}.`);
+  };
 
   const save = () => {
     if (!form.firstName.trim() || !form.lastName.trim()) {
       setMessage("Ingresa nombres y apellidos.");
+      return;
+    }
+
+    if (!form.address.trim()) {
+      setMessage(`Ingresa una dirección principal válida en ${form.city}.`);
       return;
     }
 
@@ -733,8 +961,8 @@ export function EditProfileScreen({ navigation }) {
         Actualiza tus datos personales. En esta versión se guardan en el estado local de la app.
       </Text>
       <Card>
-        <Field label="Nombres" value={form.firstName} onChangeText={(value) => update("firstName", value)} placeholder="Nathaly" />
-        <Field label="Apellidos" value={form.lastName} onChangeText={(value) => update("lastName", value)} placeholder="Holguin" />
+        <Field label="Nombres" value={form.firstName} onChangeText={(value) => update("firstName", value)} placeholder="Ingresa tus nombres" />
+        <Field label="Apellidos" value={form.lastName} onChangeText={(value) => update("lastName", value)} placeholder="Ingresa tus apellidos" />
         <Field label="Correo electrónico" value={form.email} onChangeText={(value) => update("email", value)} placeholder="correo@ejemplo.com" />
         <Field label="Número celular" value={form.phone} onChangeText={(value) => update("phone", value)} placeholder="0991234567" />
         <Field label="Número de cédula" value={form.idNumber} onChangeText={(value) => update("idNumber", value)} placeholder="1312345678" />
@@ -745,7 +973,7 @@ export function EditProfileScreen({ navigation }) {
         <Text style={typography.h3}>Ciudad principal</Text>
         <View style={styles.tagWrap}>
           {cities.slice(0, 8).map((city) => (
-            <Chip key={city} label={city} selected={form.city === city} onPress={() => update("city", city)} />
+            <Chip key={city} label={city} selected={form.city === city} onPress={() => selectProfileCity(city)} />
           ))}
         </View>
         <Field label="Dirección principal" value={form.address} onChangeText={(value) => update("address", value)} placeholder="Calle principal y referencia" multiline />
@@ -1364,5 +1592,22 @@ const styles = StyleSheet.create({
   successText: {
     color: "#22864B",
     fontWeight: "850",
+  },
+  addressMessage: {
+    color: colors.primaryDark,
+    fontSize: 14,
+    fontWeight: "750",
+    lineHeight: 20,
+  },
+  addressActions: {
+    gap: spacing.sm,
+  },
+  addressActionButton: {
+    width: "100%",
+  },
+  mapHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
   },
 });

@@ -18,7 +18,7 @@ import {
   SearchBar,
   SectionHeader,
 } from "../../components/MercattoUI";
-import { businesses, products, promotions } from "../../data/mercattoData";
+import { businesses, cities, products, promotions } from "../../data/mercattoData";
 import { useMercatto } from "../../context/MercattoContext";
 import { colors, radius, shadows, spacing, typography } from "../../theme/mercattoTheme";
 
@@ -87,7 +87,7 @@ export function BuyerHomeScreen({ navigation }) {
         </View>
 
         <View style={styles.locationBlock}>
-          <Text style={styles.helloText}>Hola, {user?.firstName || "María"}</Text>
+          <Text style={styles.helloText}>Hola, {user?.firstName || "Usuario"}</Text>
           <Pressable onPress={() => navigation.navigate("Address")} style={styles.locationPill}>
             <Ionicons name="location-outline" size={17} color={colors.ink} />
             <Text numberOfLines={1} style={styles.locationText}>{selectedCity} · {deliveryAddress}</Text>
@@ -593,7 +593,7 @@ export function BuyerProfileScreen({ navigation }) {
         <View style={styles.profileRow}>
           <Avatar label={user?.photo || "MZ"} size={76} />
           <View style={{ flex: 1 }}>
-            <Text style={typography.h2}>{user?.name || "María Zambrano"}</Text>
+            <Text style={typography.h2}>{user?.name || "Usuario Mercatto"}</Text>
             <Text style={typography.muted}>{user?.email}</Text>
             <Text style={typography.muted}>{user?.phone}</Text>
           </View>
@@ -606,7 +606,7 @@ export function BuyerProfileScreen({ navigation }) {
       </Card>
       <Card>
         {items.map(([icon, label, type]) => (
-          <MenuRow key={label} icon={icon} label={label} onPress={() => navigation.navigate(type === "favorites" ? "Favorites" : type === "address" ? "Address" : "StateScreen", { type })} />
+          <MenuRow key={label} icon={icon} label={label} onPress={() => navigation.navigate(type === "favorites" ? "Favorites" : type === "address" ? "Address" : type === "profile-edit" ? "EditProfile" : "StateScreen", { type })} />
         ))}
         <MenuRow
           icon="storefront-outline"
@@ -661,14 +661,21 @@ export function FavoritesScreen({ navigation }) {
 }
 
 export function AddressScreen({ navigation }) {
-  const { deliveryAddress, setDeliveryAddress } = useMercatto();
+  const { deliveryAddress, selectedCity, setDeliveryAddress, setSelectedCity } = useMercatto();
   const [address, setAddress] = useState(deliveryAddress);
+  const [city, setCity] = useState(selectedCity);
   const [sector, setSector] = useState("Centro");
   const [reference, setReference] = useState("Casa color blanco, portón negro");
   return (
     <Screen>
       <Text style={typography.h1}>Dirección de entrega</Text>
       <Card>
+        <Text style={typography.h3}>Ciudad</Text>
+        <View style={styles.tagWrap}>
+          {cities.slice(0, 8).map((item) => (
+            <Chip key={item} label={item} selected={city === item} onPress={() => setCity(item)} />
+          ))}
+        </View>
         <Field label="Dirección" value={address} onChangeText={setAddress} placeholder="Calle principal y secundaria" />
         <Field label="Sector" value={sector} onChangeText={setSector} placeholder="Sector o barrio" />
         <Field label="Referencia" value={reference} onChangeText={setReference} placeholder="Referencia visible para entrega" multiline />
@@ -676,7 +683,75 @@ export function AddressScreen({ navigation }) {
           <Text style={typography.h3}>Ubicación en mapa</Text>
           <Text style={typography.muted}>Mapa simulado. Más adelante se conectará con geolocalización.</Text>
         </Card>
-        <PrimaryButton title="Guardar dirección" onPress={() => { setDeliveryAddress(address); navigation.goBack(); }} />
+        <PrimaryButton title="Guardar dirección" onPress={() => { setSelectedCity(city); setDeliveryAddress(address); navigation.goBack(); }} />
+      </Card>
+    </Screen>
+  );
+}
+
+export function EditProfileScreen({ navigation }) {
+  const { user, selectedCity, deliveryAddress, updateUserProfile } = useMercatto();
+  const [form, setForm] = useState({
+    firstName: user?.firstName || "",
+    lastName: user?.lastName || "",
+    email: user?.email || "",
+    phone: user?.phone === "Pendiente" ? "" : user?.phone || "",
+    idNumber: user?.idNumber === "Pendiente" ? "" : user?.idNumber || "",
+    birthDate: user?.birthDate === "Pendiente" ? "" : user?.birthDate || "",
+    gender: user?.gender === "Pendiente" ? "" : user?.gender || "",
+    address: deliveryAddress || user?.address || "",
+    city: selectedCity || user?.city || "Manta",
+  });
+  const [message, setMessage] = useState("");
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+
+  const save = () => {
+    if (!form.firstName.trim() || !form.lastName.trim()) {
+      setMessage("Ingresa nombres y apellidos.");
+      return;
+    }
+
+    updateUserProfile({
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim() || "Pendiente",
+      idNumber: form.idNumber.trim() || "Pendiente",
+      birthDate: form.birthDate.trim() || "Pendiente",
+      gender: form.gender.trim() || "Pendiente",
+      address: form.address.trim(),
+      city: form.city,
+    });
+    setMessage("Información actualizada correctamente.");
+    setTimeout(() => navigation.goBack(), 450);
+  };
+
+  return (
+    <Screen>
+      <Text style={typography.h1}>Editar información</Text>
+      <Text style={typography.muted}>
+        Actualiza tus datos personales. En esta versión se guardan en el estado local de la app.
+      </Text>
+      <Card>
+        <Field label="Nombres" value={form.firstName} onChangeText={(value) => update("firstName", value)} placeholder="Nathaly" />
+        <Field label="Apellidos" value={form.lastName} onChangeText={(value) => update("lastName", value)} placeholder="Holguin" />
+        <Field label="Correo electrónico" value={form.email} onChangeText={(value) => update("email", value)} placeholder="correo@ejemplo.com" />
+        <Field label="Número celular" value={form.phone} onChangeText={(value) => update("phone", value)} placeholder="0991234567" />
+        <Field label="Número de cédula" value={form.idNumber} onChangeText={(value) => update("idNumber", value)} placeholder="1312345678" />
+        <Field label="Fecha de nacimiento" value={form.birthDate} onChangeText={(value) => update("birthDate", value)} placeholder="AAAA-MM-DD" />
+        <Field label="Género" value={form.gender} onChangeText={(value) => update("gender", value)} placeholder="Femenino, masculino, otro" />
+      </Card>
+      <Card>
+        <Text style={typography.h3}>Ciudad principal</Text>
+        <View style={styles.tagWrap}>
+          {cities.slice(0, 8).map((city) => (
+            <Chip key={city} label={city} selected={form.city === city} onPress={() => update("city", city)} />
+          ))}
+        </View>
+        <Field label="Dirección principal" value={form.address} onChangeText={(value) => update("address", value)} placeholder="Calle principal y referencia" multiline />
+        {message ? <Text style={styles.successText}>{message}</Text> : null}
+        <PrimaryButton title="Guardar cambios" icon="save-outline" onPress={save} />
+        <PrimaryButton title="Cancelar" variant="secondary" onPress={() => navigation.goBack()} />
       </Card>
     </Screen>
   );
@@ -1285,5 +1360,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F4C5BA",
     backgroundColor: "#FFF8F6",
+  },
+  successText: {
+    color: "#22864B",
+    fontWeight: "850",
   },
 });

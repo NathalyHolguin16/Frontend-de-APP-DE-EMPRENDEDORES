@@ -26,6 +26,7 @@ import {
   BuyerProfileScreen,
   CartScreen,
   CheckoutScreen,
+  EditProfileScreen,
   FavoritesScreen,
   OrderConfirmationScreen,
   ProductDetailScreen,
@@ -176,6 +177,7 @@ export default function App() {
             <Stack.Screen name="OrderConfirmation" component={OrderConfirmationScreen} />
             <Stack.Screen name="Favorites" component={FavoritesScreen} />
             <Stack.Screen name="Address" component={AddressScreen} />
+            <Stack.Screen name="EditProfile" component={EditProfileScreen} />
             <Stack.Screen name="StateScreen" component={StateScreen} />
           </Stack.Navigator>
         </NavigationContainer>

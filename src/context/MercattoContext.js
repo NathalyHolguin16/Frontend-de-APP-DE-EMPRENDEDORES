@@ -12,6 +12,7 @@ const MercattoContext = createContext(null);
 
 export function MercattoProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [knownUsers, setKnownUsers] = useState({});
   const [mode, setMode] = useState("buyer");
   const [selectedCity, setSelectedCity] = useState(cities[0]);
   const [deliveryAddress, setDeliveryAddress] = useState(
@@ -29,20 +30,32 @@ export function MercattoProvider({ children }) {
   const [sellerOrders, setSellerOrders] = useState(entrepreneurOrders);
 
   const login = ({ identifier }) => {
+    const normalizedIdentifier = identifier?.trim().toLowerCase();
+    const rememberedUser = knownUsers[normalizedIdentifier];
+
+    if (rememberedUser) {
+      setUser(rememberedUser);
+      setSelectedCity(rememberedUser.city || selectedCity);
+      setDeliveryAddress(rememberedUser.address || deliveryAddress);
+      return rememberedUser;
+    }
+
     const hasBothProfiles = !identifier || identifier.toLowerCase().includes("ambos");
+    const inferredName = inferNameFromIdentifier(identifier);
+    const [firstName, ...lastNameParts] = inferredName.split(" ");
     const nextUser = {
-      firstName: "María",
-      lastName: "Zambrano",
-      name: "María Zambrano",
-      idNumber: "1312345678",
-      birthDate: "1996-05-18",
-      gender: "Femenino",
-      phone: "099 321 8855",
-      email: identifier?.includes("@") ? identifier : "maria@mercatto.ec",
+      firstName,
+      lastName: lastNameParts.join(" "),
+      name: inferredName,
+      idNumber: "Pendiente",
+      birthDate: "Pendiente",
+      gender: "Pendiente",
+      phone: identifier && !identifier.includes("@") ? identifier : "Pendiente",
+      email: identifier?.includes("@") ? identifier : "usuario@mercatto.ec",
       city: selectedCity,
       address: deliveryAddress,
       profiles: hasBothProfiles ? ["buyer", "entrepreneur"] : ["buyer"],
-      photo: "MZ",
+      photo: getInitials(inferredName),
     };
     setUser(nextUser);
     return nextUser;
@@ -61,11 +74,48 @@ export function MercattoProvider({ children }) {
       city: data.city || selectedCity,
       address: data.address || deliveryAddress,
       profiles: profileType === "entrepreneur" ? ["buyer", "entrepreneur"] : ["buyer"],
-      photo: "MU",
+      photo: getInitials(`${data.names || "Nuevo"} ${data.lastNames || "Usuario"}`),
     };
     setUser(nextUser);
+    setKnownUsers((current) => ({
+      ...current,
+      [nextUser.email.trim().toLowerCase()]: nextUser,
+    }));
+    setSelectedCity(nextUser.city);
+    setDeliveryAddress(nextUser.address);
     setMode(profileType === "entrepreneur" ? "entrepreneur" : "buyer");
     return nextUser;
+  };
+
+  const updateUserProfile = (patch) => {
+    const firstName = patch.firstName ?? user?.firstName ?? "Usuario";
+    const lastName = patch.lastName ?? user?.lastName ?? "";
+    const name = `${firstName} ${lastName}`.trim();
+    const nextUser = {
+      ...user,
+      ...patch,
+      firstName,
+      lastName,
+      name,
+      photo: getInitials(name),
+    };
+
+    setUser(nextUser);
+
+    if (nextUser.email) {
+      setKnownUsers((users) => ({
+        ...users,
+        [nextUser.email.trim().toLowerCase()]: nextUser,
+      }));
+    }
+
+    if (patch.city) {
+      setSelectedCity(patch.city);
+    }
+
+    if (patch.address) {
+      setDeliveryAddress(patch.address);
+    }
   };
 
   const logout = () => {
@@ -208,6 +258,7 @@ export function MercattoProvider({ children }) {
     setDeliveryAddress,
     login,
     registerUser,
+    updateUserProfile,
     logout,
     toggleFavorite,
     addToCart,
@@ -220,6 +271,44 @@ export function MercattoProvider({ children }) {
   };
 
   return <MercattoContext.Provider value={value}>{children}</MercattoContext.Provider>;
+}
+
+function getInitials(name) {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "M";
+}
+
+function inferNameFromIdentifier(identifier) {
+  if (!identifier) {
+    return "Usuario Mercatto";
+  }
+
+  if (!identifier.includes("@")) {
+    return "Usuario Mercatto";
+  }
+
+  const localPart = identifier
+    .split("@")[0]
+    .replace(/\d+/g, "")
+    .replace(/[._-]+/g, " ")
+    .trim();
+
+  if (/nathaly/i.test(localPart) && /holguin/i.test(localPart)) {
+    return "Nathaly Holguin";
+  }
+
+  const words = localPart
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+
+  return words.length ? words.join(" ") : "Usuario Mercatto";
 }
 
 export function useMercatto() {

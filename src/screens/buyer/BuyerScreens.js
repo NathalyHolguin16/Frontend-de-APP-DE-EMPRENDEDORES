@@ -1002,7 +1002,7 @@ export function AddressScreen({ navigation }) {
 }
 
 export function EditProfileScreen({ navigation }) {
-  const { user, selectedCity, deliveryAddress, updateUserProfile } = useMercatto();
+  const { user, selectedCity, deliveryAddress, saveUserProfile, updateUserProfile } = useMercatto();
   const initialNames = getEditableProfileNames(user);
   const [form, setForm] = useState({
     firstName: initialNames.firstName,
@@ -1016,6 +1016,7 @@ export function EditProfileScreen({ navigation }) {
     city: selectedCity || user?.city || "Manta",
   });
   const [message, setMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const selectProfileCity = (city) => {
     setForm((current) =>
@@ -1024,7 +1025,7 @@ export function EditProfileScreen({ navigation }) {
     setMessage(`Ingresa una dirección principal válida en ${city}.`);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.firstName.trim() || !form.lastName.trim()) {
       setMessage("Ingresa nombres y apellidos.");
       return;
@@ -1035,7 +1036,7 @@ export function EditProfileScreen({ navigation }) {
       return;
     }
 
-    updateUserProfile({
+    const profilePatch = {
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim(),
       email: form.email.trim(),
@@ -1045,8 +1046,23 @@ export function EditProfileScreen({ navigation }) {
       gender: form.gender.trim() || "Pendiente",
       address: form.address.trim(),
       city: form.city,
-    });
-    setMessage("Cambios guardados en este dispositivo. Laravel aún no permite actualizar el perfil.");
+    };
+
+    setIsSaving(true);
+    setMessage("");
+    try {
+      await saveUserProfile(profilePatch);
+      setMessage("Fecha de nacimiento y género guardados en Laravel.");
+    } catch (error) {
+      updateUserProfile(profilePatch);
+      setMessage(
+        [404, 405].includes(error?.status)
+          ? "Cambios guardados en este dispositivo. Laravel todavía no habilita PATCH /api/me."
+          : "No pudimos sincronizar con Laravel. Los cambios quedaron guardados en este dispositivo.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -1079,7 +1095,12 @@ export function EditProfileScreen({ navigation }) {
         </View>
         <Field label="Dirección principal" value={form.address} onChangeText={(value) => update("address", value)} placeholder="Calle principal y referencia" multiline />
         {message ? <Text style={styles.successText}>{message}</Text> : null}
-        <PrimaryButton title="Guardar cambios" icon="save-outline" onPress={save} />
+        <PrimaryButton
+          title={isSaving ? "Guardando cambios..." : "Guardar cambios"}
+          icon="save-outline"
+          disabled={isSaving}
+          onPress={save}
+        />
         <PrimaryButton title="Cancelar" variant="secondary" onPress={() => navigation.goBack()} />
       </Card>
     </Screen>

@@ -24,6 +24,7 @@ import {
   saveToken,
   saveCachedProfile,
   updateOrderStatus,
+  updateProfile as updateProfileRequest,
   updateProduct as updateProductRequest,
   updateStore as updateStoreRequest,
 } from "../../services/mercattoApi";
@@ -205,6 +206,30 @@ export function MercattoProvider({ children }) {
     if (patch.address) {
       setDeliveryAddress(patch.address);
     }
+  };
+
+  const saveUserProfile = async (patch) => {
+    const response = await updateProfileRequest({
+      birth_date: patch.birthDate || null,
+      gender: patch.gender || null,
+    });
+    const apiUser = response?.user || response?.data || response;
+    const nextUser = {
+      ...user,
+      ...patch,
+      id: apiUser?.id || user?.id,
+      email: apiUser?.email || patch.email || user?.email,
+      birthDate: apiUser?.birth_date || patch.birthDate || "Pendiente",
+      gender: apiUser?.gender || patch.gender || "Pendiente",
+      name: `${patch.firstName || user?.firstName || ""} ${patch.lastName || user?.lastName || ""}`.trim(),
+    };
+    nextUser.photo = getInitials(nextUser.name);
+
+    setUser(nextUser);
+    if (patch.city) setSelectedCity(patch.city);
+    if (patch.address) setDeliveryAddress(patch.address);
+    await saveCachedProfile({ ownerEmail: nextUser.email, profile: nextUser });
+    return nextUser;
   };
 
   const saveDeliveryAddress = async ({ apiPayload, localAddress }) => {
@@ -435,6 +460,7 @@ export function MercattoProvider({ children }) {
     login,
     registerUser,
     updateUserProfile,
+    saveUserProfile,
     saveDeliveryAddress,
     logout,
     toggleFavorite,

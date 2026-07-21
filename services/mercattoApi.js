@@ -195,6 +195,14 @@ export async function getMe(token) {
   });
 }
 
+export async function updateProfile(payload, token) {
+  return request("/api/me", {
+    method: "PATCH",
+    body: payload,
+    token,
+  });
+}
+
 export async function logoutUser(token) {
   return request("/api/logout", {
     method: "POST",

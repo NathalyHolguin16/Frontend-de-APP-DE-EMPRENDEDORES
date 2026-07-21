@@ -1,28 +1,34 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
-  Animated,
-  KeyboardAvoidingView,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
+    Animated,
+    KeyboardAvoidingView,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
 
 import {
-  Card,
-  CheckboxRow,
-  Chip,
-  Field,
-  MercattoLogo,
-  PasswordStrength,
-  PrimaryButton,
-  Screen,
-  SearchBar,
+    Card,
+    CheckboxRow,
+    Chip,
+    Field,
+    MercattoLogo,
+    PasswordStrength,
+    PrimaryButton,
+    Screen,
+    SearchBar,
 } from "../../components/MercattoUI";
-import { cities, formSteps } from "../../data/mercattoData";
 import { useMercatto } from "../../context/MercattoContext";
-import { colors, radius, shadows, spacing, typography } from "../../theme/mercattoTheme";
+import { cities, formSteps } from "../../data/mercattoData";
+import {
+    colors,
+    radius,
+    shadows,
+    spacing,
+    typography,
+} from "../../theme/mercattoTheme";
 import { isEmailOrPhone, validatePassword } from "../../utils/validation";
 
 export function SplashScreen({ navigation }) {
@@ -31,19 +37,33 @@ export function SplashScreen({ navigation }) {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 6 }),
-      Animated.timing(opacity, { toValue: 1, duration: 520, useNativeDriver: true }),
+      Animated.spring(scale, {
+        toValue: 1,
+        useNativeDriver: true,
+        friction: 6,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 520,
+        useNativeDriver: true,
+      }),
     ]).start();
     const id = setTimeout(() => navigation.replace("Login"), 1300);
     return () => clearTimeout(id);
   }, [navigation, opacity, scale]);
 
   return (
-    <Screen scroll={false} style={styles.splash} contentStyle={styles.splashContent}>
+    <Screen
+      scroll={false}
+      style={styles.splash}
+      contentStyle={styles.splashContent}
+    >
       <Animated.View style={{ opacity, transform: [{ scale }] }}>
         <MercattoLogo size={108} light />
       </Animated.View>
-      <Text style={styles.splashSubtitle}>Compra local. Vende fácil. Crece cerca.</Text>
+      <Text style={styles.splashSubtitle}>
+        Compra local. Vende fácil. Crece cerca.
+      </Text>
       <View style={styles.loadingTrack}>
         <Animated.View style={[styles.loadingBar, { opacity }]} />
       </View>
@@ -63,7 +83,8 @@ export function LoginScreen({ navigation }) {
     if (!identifier.trim()) {
       nextErrors.identifier = "Ingresa tu correo electrónico o número celular.";
     } else if (!isEmailOrPhone(identifier)) {
-      nextErrors.identifier = "Usa un correo válido o un celular ecuatoriano que inicie con 09.";
+      nextErrors.identifier =
+        "Usa un correo válido o un celular ecuatoriano que inicie con 09.";
     }
     if (!password.trim()) {
       nextErrors.password = "Ingresa tu contraseña.";
@@ -111,8 +132,15 @@ export function LoginScreen({ navigation }) {
           <Pressable onPress={() => navigation.navigate("ForgotPassword")}>
             <Text style={styles.forgot}>¿Olvidaste tu contraseña?</Text>
           </Pressable>
-          <PrimaryButton title="Iniciar sesión" icon="log-in-outline" onPress={submit} />
-          <Pressable onPress={() => navigation.navigate("RegisterRole")} style={styles.centerRow}>
+          <PrimaryButton
+            title="Iniciar sesión"
+            icon="log-in-outline"
+            onPress={submit}
+          />
+          <Pressable
+            onPress={() => navigation.navigate("RegisterRole")}
+            style={styles.centerRow}
+          >
             <Text style={styles.bottomText}>¿No tienes una cuenta? </Text>
             <Text style={styles.bottomLink}>Regístrate</Text>
           </Pressable>
@@ -132,10 +160,25 @@ export function ForgotPasswordScreen({ navigation }) {
         Te enviaremos un código de seguridad a tu correo o celular registrado.
       </Text>
       <Card>
-        <Field label="Correo o celular" placeholder="maria@correo.com" value={value} onChangeText={setValue} />
-        {sent ? <Text style={styles.success}>Código enviado. Revisa tus mensajes.</Text> : null}
+        <Field
+          label="Correo o celular"
+          placeholder="maria@correo.com"
+          value={value}
+          onChangeText={setValue}
+        />
+        {sent ? (
+          <Text style={styles.success}>
+            Código enviado. Revisa tus mensajes.
+          </Text>
+        ) : null}
         <PrimaryButton title="Enviar código" onPress={() => setSent(true)} />
-        <PrimaryButton title="Introducir código" variant="secondary" onPress={() => navigation.navigate("Verification", { purpose: "password" })} />
+        <PrimaryButton
+          title="Introducir código"
+          variant="secondary"
+          onPress={() =>
+            navigation.navigate("Verification", { purpose: "password" })
+          }
+        />
       </Card>
     </Screen>
   );
@@ -145,13 +188,16 @@ export function ModeSelectScreen({ navigation }) {
   const { setMode } = useMercatto();
   const selectMode = (nextMode) => {
     setMode(nextMode);
-    navigation.replace(nextMode === "buyer" ? "CitySelect" : "EntrepreneurTabs");
+    navigation.replace(
+      nextMode === "buyer" ? "CitySelect" : "EntrepreneurTabs",
+    );
   };
   return (
     <Screen>
       <Text style={typography.h1}>¿Cómo deseas entrar?</Text>
       <Text style={typography.muted}>
-        Tu cuenta tiene perfil comprador y emprendedor. Puedes cambiarlo después desde Perfil.
+        Tu cuenta tiene perfil comprador y emprendedor. Puedes cambiarlo después
+        desde Perfil.
       </Text>
       <RoleCard
         icon="bag-handle-outline"
@@ -175,13 +221,16 @@ export function ModeSelectScreen({ navigation }) {
 export function RegisterRoleScreen({ navigation }) {
   const [selected, setSelected] = useState("buyer");
   const goNext = () => {
-    navigation.navigate(selected === "buyer" ? "BuyerRegister" : "EntrepreneurRegister");
+    navigation.navigate(
+      selected === "buyer" ? "BuyerRegister" : "EntrepreneurRegister",
+    );
   };
   return (
     <Screen>
       <Text style={typography.h1}>¿Cómo deseas utilizar Mercatto?</Text>
       <Text style={typography.muted}>
-        Elige un punto de partida. Más adelante podrás activar ambos perfiles en tu cuenta.
+        Elige un punto de partida. Más adelante podrás activar ambos perfiles en
+        tu cuenta.
       </Text>
       <RoleCard
         icon="basket-outline"
@@ -200,23 +249,73 @@ export function RegisterRoleScreen({ navigation }) {
         onPress={() => setSelected("entrepreneur")}
         dark
       />
-      <PrimaryButton title="Continuar" icon="arrow-forward-outline" onPress={goNext} />
+      <PrimaryButton
+        title="Continuar"
+        icon="arrow-forward-outline"
+        onPress={goNext}
+      />
     </Screen>
   );
 }
 
-function RoleCard({ icon, title, description, button, onPress, selected, dark }) {
+function RoleCard({
+  icon,
+  title,
+  description,
+  button,
+  onPress,
+  selected,
+  dark,
+}) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.roleCard, dark && styles.roleCardDark, selected && styles.roleSelected, pressed && styles.pressed]}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.roleCard,
+        dark && styles.roleCardDark,
+        selected && styles.roleSelected,
+        pressed && styles.pressed,
+      ]}
+    >
       <View style={styles.roleTop}>
-        <View style={[styles.roleIcon, dark && { backgroundColor: colors.primary }]}>
-          <Ionicons name={icon} size={27} color={dark ? colors.ink : colors.primaryDark} />
+        <View
+          style={[styles.roleIcon, dark && { backgroundColor: colors.primary }]}
+        >
+          <Ionicons
+            name={icon}
+            size={27}
+            color={dark ? colors.ink : colors.primaryDark}
+          />
         </View>
-        {selected ? <Chip label="Seleccionado" selected /> : null}
+        {selected ? (
+          <View
+            style={[
+              styles.roleStatus,
+              dark ? styles.roleStatusDark : styles.roleStatusLight,
+            ]}
+          >
+            <Text
+              style={[
+                styles.roleStatusText,
+                dark ? styles.roleStatusTextDark : styles.roleStatusTextLight,
+              ]}
+            >
+              Opción seleccionada
+            </Text>
+          </View>
+        ) : null}
       </View>
-      <Text style={[styles.roleTitle, dark && { color: colors.white }]}>{title}</Text>
-      <Text style={[styles.roleDesc, dark && { color: "#E9E1D4" }]}>{description}</Text>
-      <PrimaryButton title={button} variant={dark ? "secondary" : "primary"} onPress={onPress} />
+      <Text style={[styles.roleTitle, dark && { color: colors.white }]}>
+        {title}
+      </Text>
+      <Text style={[styles.roleDesc, dark && { color: "#E9E1D4" }]}>
+        {description}
+      </Text>
+      <PrimaryButton
+        title={button}
+        variant={dark ? "secondary" : "primary"}
+        onPress={onPress}
+      />
     </Pressable>
   );
 }
@@ -230,7 +329,8 @@ export function EntrepreneurRegisterScreen({ navigation }) {
   const [data, setData] = useState({});
   const progress = ((step + 1) / formSteps.length) * 100;
 
-  const update = (key, value) => setData((current) => ({ ...current, [key]: value }));
+  const update = (key, value) =>
+    setData((current) => ({ ...current, [key]: value }));
   const fieldsByStep = [
     [
       ["names", "Nombres"],
@@ -256,11 +356,35 @@ export function EntrepreneurRegisterScreen({ navigation }) {
       ["baseCity", "Ciudad base"],
       ["coverage", "Sectores o ciudades donde ofrece productos"],
     ],
-    [["logo", "Logo del emprendimiento"], ["cover", "Imagen de portada"], ["starProduct", "Fotografía del producto estrella"], ["gallery", "Fotos adicionales"]],
-    [["modality", "Modalidad del negocio"], ["location", "Dirección exacta"], ["schedule", "Horarios de atención"], ["pickup", "Retiro, delivery o punto de encuentro"]],
-    [["delivery", "Zonas y costos de delivery"], ["prepTime", "Tiempo de preparación"], ["minOrder", "Pedido mínimo"], ["freeFrom", "Envío gratis desde"]],
-    [["payments", "Métodos de pago"], ["bank", "Datos bancarios privados"], ["wallet", "Billetera digital"]],
-    [["changes", "Política de cambios"], ["returns", "Política de devoluciones"], ["cancel", "Política de cancelación"], ["custom", "Condiciones para personalizados"]],
+    [
+      ["logo", "Logo del emprendimiento"],
+      ["cover", "Imagen de portada"],
+      ["starProduct", "Fotografía del producto estrella"],
+      ["gallery", "Fotos adicionales"],
+    ],
+    [
+      ["modality", "Modalidad del negocio"],
+      ["location", "Dirección exacta"],
+      ["schedule", "Horarios de atención"],
+      ["pickup", "Retiro, delivery o punto de encuentro"],
+    ],
+    [
+      ["delivery", "Zonas y costos de delivery"],
+      ["prepTime", "Tiempo de preparación"],
+      ["minOrder", "Pedido mínimo"],
+      ["freeFrom", "Envío gratis desde"],
+    ],
+    [
+      ["payments", "Métodos de pago"],
+      ["bank", "Datos bancarios privados"],
+      ["wallet", "Billetera digital"],
+    ],
+    [
+      ["changes", "Política de cambios"],
+      ["returns", "Política de devoluciones"],
+      ["cancel", "Política de cancelación"],
+      ["custom", "Condiciones para personalizados"],
+    ],
     [["review", "Resumen final y notas para revisión"]],
   ];
 
@@ -271,7 +395,9 @@ export function EntrepreneurRegisterScreen({ navigation }) {
   return (
     <Screen>
       <Text style={typography.h1}>Registro emprendedor</Text>
-      <Text style={typography.muted}>Paso {step + 1} de {formSteps.length}: {formSteps[step]}</Text>
+      <Text style={typography.muted}>
+        Paso {step + 1} de {formSteps.length}: {formSteps[step]}
+      </Text>
       <View style={styles.progressTrack}>
         <View style={[styles.progressBar, { width: `${progress}%` }]} />
       </View>
@@ -283,7 +409,15 @@ export function EntrepreneurRegisterScreen({ navigation }) {
             placeholder={placeholderFor(label)}
             value={data[key] || ""}
             onChangeText={(value) => update(key, value)}
-            multiline={["about", "coverage", "delivery", "changes", "returns", "custom", "review"].includes(key)}
+            multiline={[
+              "about",
+              "coverage",
+              "delivery",
+              "changes",
+              "returns",
+              "custom",
+              "review",
+            ].includes(key)}
           />
         ))}
         {step === 0 ? (
@@ -297,8 +431,25 @@ export function EntrepreneurRegisterScreen({ navigation }) {
         {step === 7 ? <ReviewPreview data={data} /> : null}
       </Card>
       <View style={styles.navRow}>
-        <PrimaryButton title="Atrás" variant="secondary" onPress={() => (step === 0 ? navigation.goBack() : setStep((value) => value - 1))} style={{ flex: 1 }} />
-        <PrimaryButton title={step === formSteps.length - 1 ? "Enviar para revisión" : "Siguiente"} onPress={() => (step === formSteps.length - 1 ? finish() : setStep((value) => value + 1))} style={{ flex: 1 }} />
+        <PrimaryButton
+          title="Atrás"
+          variant="secondary"
+          onPress={() =>
+            step === 0 ? navigation.goBack() : setStep((value) => value - 1)
+          }
+          style={{ flex: 1 }}
+        />
+        <PrimaryButton
+          title={
+            step === formSteps.length - 1 ? "Enviar para revisión" : "Siguiente"
+          }
+          onPress={() =>
+            step === formSteps.length - 1
+              ? finish()
+              : setStep((value) => value + 1)
+          }
+          style={{ flex: 1 }}
+        />
       </View>
     </Screen>
   );
@@ -306,7 +457,14 @@ export function EntrepreneurRegisterScreen({ navigation }) {
 
 function RegisterForm({ profileType, navigation }) {
   const [data, setData] = useState({});
-  const update = (key, value) => setData((current) => ({ ...current, [key]: value }));
+  const update = (key, value) =>
+    setData((current) => ({ ...current, [key]: value }));
+  const genderOptions = [
+    "Femenino",
+    "Masculino",
+    "Otro",
+    "Prefiero no decirlo",
+  ];
   const fields = [
     ["names", "Nombres"],
     ["lastNames", "Apellidos"],
@@ -335,23 +493,46 @@ function RegisterForm({ profileType, navigation }) {
         Crea tu cuenta para comprar en emprendimientos de tu ciudad.
       </Text>
       <Card>
-        {fields.map(([key, label]) => (
-          <Field
-            key={key}
-            label={label}
-            placeholder={placeholderFor(label)}
-            value={data[key] || ""}
-            onChangeText={(value) => update(key, value)}
-          />
-        ))}
+        {fields.map(([key, label]) =>
+          key === "gender" ? (
+            <View key={key} style={styles.field}>
+              <Text style={styles.label}>{label}</Text>
+              <View style={styles.chipWrap}>
+                {genderOptions.map((option) => (
+                  <Chip
+                    key={option}
+                    label={option}
+                    selected={data.gender === option}
+                    onPress={() => update("gender", option)}
+                  />
+                ))}
+              </View>
+            </View>
+          ) : (
+            <Field
+              key={key}
+              label={label}
+              placeholder={placeholderFor(label)}
+              value={data[key] || ""}
+              onChangeText={(value) => update(key, value)}
+            />
+          ),
+        )}
         <PasswordPair data={data} update={update} />
         <LegalChecks data={data} update={update} />
-        {!valid ? <Text style={styles.errorHint}>Completa todos los campos, acepta términos y usa una contraseña fuerte.</Text> : null}
+        {!valid ? (
+          <Text style={styles.errorHint}>
+            Completa todos los campos, acepta términos y usa una contraseña
+            fuerte.
+          </Text>
+        ) : null}
         <PrimaryButton
           title="Crear cuenta"
           icon="person-add-outline"
           disabled={!valid}
-          onPress={() => navigation.navigate("Verification", { profileType, data })}
+          onPress={() =>
+            navigation.navigate("Verification", { profileType, data })
+          }
         />
       </Card>
     </Screen>
@@ -362,7 +543,8 @@ function PasswordPair({ data, update }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const result = validatePassword(data.password || "");
-  const mismatch = data.confirmPassword && data.password !== data.confirmPassword;
+  const mismatch =
+    data.confirmPassword && data.password !== data.confirmPassword;
   return (
     <>
       <Field
@@ -385,7 +567,9 @@ function PasswordPair({ data, update }) {
         onRightPress={() => setShowConfirm((value) => !value)}
         error={mismatch ? "Las contraseñas no coinciden." : ""}
       />
-      {data.confirmPassword && !mismatch ? <Text style={styles.success}>Las contraseñas coinciden.</Text> : null}
+      {data.confirmPassword && !mismatch ? (
+        <Text style={styles.success}>Las contraseñas coinciden.</Text>
+      ) : null}
     </>
   );
 }
@@ -393,8 +577,16 @@ function PasswordPair({ data, update }) {
 function LegalChecks({ data, update }) {
   return (
     <>
-      <CheckboxRow label="Acepto los términos y condiciones de Mercatto." checked={!!data.terms} onPress={() => update("terms", !data.terms)} />
-      <CheckboxRow label="Acepto las políticas de privacidad y tratamiento de datos." checked={!!data.privacy} onPress={() => update("privacy", !data.privacy)} />
+      <CheckboxRow
+        label="Acepto los términos y condiciones de Mercatto."
+        checked={!!data.terms}
+        onPress={() => update("terms", !data.terms)}
+      />
+      <CheckboxRow
+        label="Acepto las políticas de privacidad y tratamiento de datos."
+        checked={!!data.privacy}
+        onPress={() => update("privacy", !data.privacy)}
+      />
     </>
   );
 }
@@ -402,20 +594,39 @@ function LegalChecks({ data, update }) {
 function ImageUploadMock() {
   return (
     <View style={styles.uploadGrid}>
-      {["Logo", "Portada", "Producto estrella", "Galería"].map((item, index) => (
-        <View key={item} style={styles.uploadBox}>
-          <Ionicons name={index === 0 ? "image-outline" : "cloud-upload-outline"} size={24} color={colors.primaryDark} />
-          <Text style={styles.uploadTitle}>{item}</Text>
-          <Text style={styles.uploadText}>Previsualizar, recortar, reemplazar o eliminar.</Text>
-          {index === 2 ? <Text style={styles.warning}>Resolución sugerida: 1200 x 900 px</Text> : null}
-        </View>
-      ))}
+      {["Logo", "Portada", "Producto estrella", "Galería"].map(
+        (item, index) => (
+          <View key={item} style={styles.uploadBox}>
+            <Ionicons
+              name={index === 0 ? "image-outline" : "cloud-upload-outline"}
+              size={24}
+              color={colors.primaryDark}
+            />
+            <Text style={styles.uploadTitle}>{item}</Text>
+            <Text style={styles.uploadText}>
+              Previsualizar, recortar, reemplazar o eliminar.
+            </Text>
+            {index === 2 ? (
+              <Text style={styles.warning}>
+                Resolución sugerida: 1200 x 900 px
+              </Text>
+            ) : null}
+          </View>
+        ),
+      )}
     </View>
   );
 }
 
 function MultiSelectMock() {
-  const options = ["Local físico", "Solo ventas en línea", "Bajo pedido", "Delivery", "Retiro en local", "Punto de encuentro"];
+  const options = [
+    "Local físico",
+    "Solo ventas en línea",
+    "Bajo pedido",
+    "Delivery",
+    "Retiro en local",
+    "Punto de encuentro",
+  ];
   const [selected, setSelected] = useState(["Delivery", "Retiro en local"]);
   return (
     <View style={styles.chipWrap}>
@@ -438,14 +649,25 @@ function MultiSelectMock() {
 }
 
 function ReviewPreview({ data }) {
-  const completed = Math.min(96, 45 + Object.values(data).filter(Boolean).length * 4);
+  const completed = Math.min(
+    96,
+    45 + Object.values(data).filter(Boolean).length * 4,
+  );
   return (
     <Card style={{ backgroundColor: colors.softOrange }}>
       <Text style={typography.h3}>Vista previa del perfil</Text>
-      <Text style={typography.body}>{data.businessName || "Nombre del emprendimiento"}</Text>
-      <Text style={typography.muted}>{data.shortDescription || "Descripción corta visible para compradores."}</Text>
+      <Text style={typography.body}>
+        {data.businessName || "Nombre del emprendimiento"}
+      </Text>
+      <Text style={typography.muted}>
+        {data.shortDescription || "Descripción corta visible para compradores."}
+      </Text>
       <Text style={styles.success}>Perfil completado al {completed}%</Text>
-      <PrimaryButton title="Editar información del negocio" variant="secondary" onPress={() => null} />
+      <PrimaryButton
+        title="Editar información del negocio"
+        variant="secondary"
+        onPress={() => null}
+      />
     </Card>
   );
 }
@@ -466,20 +688,37 @@ export function VerificationScreen({ route, navigation }) {
       return;
     }
     registerUser({ profileType, data });
-    navigation.replace(profileType === "entrepreneur" ? "EntrepreneurTabs" : "CitySelect");
+    navigation.replace(
+      profileType === "entrepreneur" ? "EntrepreneurTabs" : "CitySelect",
+    );
   };
 
   return (
     <Screen>
       <Text style={typography.h1}>Verificación</Text>
       <Text style={typography.muted}>
-        Enviamos un código de seguridad a tu celular o correo. Para esta maqueta usa 1234.
+        Enviamos un código de seguridad a tu celular o correo. Para esta maqueta
+        usa 1234.
       </Text>
       <Card>
-        <Field label="Código" placeholder="1234" keyboardType="number-pad" value={code} onChangeText={setCode} />
+        <Field
+          label="Código"
+          placeholder="1234"
+          keyboardType="number-pad"
+          value={code}
+          onChangeText={setCode}
+        />
         {message ? <Text style={styles.errorHint}>{message}</Text> : null}
-        <PrimaryButton title="Verificar y continuar" icon="shield-checkmark-outline" onPress={verify} />
-        <PrimaryButton title="Reenviar código" variant="secondary" onPress={() => setMessage("Código reenviado correctamente.")} />
+        <PrimaryButton
+          title="Verificar y continuar"
+          icon="shield-checkmark-outline"
+          onPress={verify}
+        />
+        <PrimaryButton
+          title="Reenviar código"
+          variant="secondary"
+          onPress={() => setMessage("Código reenviado correctamente.")}
+        />
       </Card>
     </Screen>
   );
@@ -489,7 +728,9 @@ export function CitySelectScreen({ route, navigation }) {
   const { selectedCity, setSelectedCity } = useMercatto();
   const [query, setQuery] = useState("");
   const [nextCity, setNextCity] = useState(selectedCity);
-  const filtered = cities.filter((city) => city.toLowerCase().includes(query.toLowerCase()));
+  const filtered = cities.filter((city) =>
+    city.toLowerCase().includes(query.toLowerCase()),
+  );
   const continueToApp = () => {
     setSelectedCity(nextCity);
     if (route.params?.fromApp) {
@@ -503,26 +744,55 @@ export function CitySelectScreen({ route, navigation }) {
     <Screen>
       <Text style={typography.h1}>¿En qué ciudad te encuentras?</Text>
       <Text style={typography.muted}>
-        Mercatto mostrará emprendimientos, promociones y entregas disponibles en tu ciudad.
+        Mercatto mostrará emprendimientos, promociones y entregas disponibles en
+        tu ciudad.
       </Text>
-      <SearchBar value={query} onChangeText={setQuery} placeholder="Buscar ciudad" />
-      <PrimaryButton title="Usar ubicación actual" icon="locate-outline" variant="secondary" onPress={() => setNextCity("Manta")} />
+      <SearchBar
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Buscar ciudad"
+      />
+      <PrimaryButton
+        title="Usar ubicación actual"
+        icon="locate-outline"
+        variant="secondary"
+        onPress={() => setNextCity("Manta")}
+      />
       <SectionTitle text="Ciudades populares" />
       <View style={styles.chipWrap}>
         {cities.slice(0, 5).map((city) => (
-          <Chip key={city} label={city} selected={nextCity === city} onPress={() => setNextCity(city)} />
+          <Chip
+            key={city}
+            label={city}
+            selected={nextCity === city}
+            onPress={() => setNextCity(city)}
+          />
         ))}
       </View>
       <SectionTitle text="Todas las ciudades" />
       <Card>
         {filtered.map((city) => (
-          <Pressable key={city} onPress={() => setNextCity(city)} style={styles.cityOption}>
+          <Pressable
+            key={city}
+            onPress={() => setNextCity(city)}
+            style={styles.cityOption}
+          >
             <Text style={styles.cityOptionText}>{city}</Text>
-            {nextCity === city ? <Ionicons name="checkmark-circle" size={22} color={colors.primaryDark} /> : null}
+            {nextCity === city ? (
+              <Ionicons
+                name="checkmark-circle"
+                size={22}
+                color={colors.primaryDark}
+              />
+            ) : null}
           </Pressable>
         ))}
       </Card>
-      <PrimaryButton title="Continuar" icon="arrow-forward-outline" onPress={continueToApp} />
+      <PrimaryButton
+        title="Continuar"
+        icon="arrow-forward-outline"
+        onPress={continueToApp}
+      />
     </Screen>
   );
 }
@@ -533,11 +803,13 @@ function SectionTitle({ text }) {
 
 function placeholderFor(label) {
   if (label.includes("Correo")) return "correo@ejemplo.com";
-  if (label.includes("celular") || label.includes("contacto")) return "0991234567";
+  if (label.includes("celular") || label.includes("contacto"))
+    return "0991234567";
   if (label.includes("Fecha")) return "AAAA-MM-DD";
   if (label.includes("Ciudad")) return "Manta";
   if (label.includes("Dirección")) return "Calle, número y referencia";
-  if (label.includes("Descripción")) return "Describe con claridad lo que ofreces";
+  if (label.includes("Descripción"))
+    return "Describe con claridad lo que ofreces";
   return label;
 }
 
@@ -616,6 +888,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  roleStatus: {
+    borderRadius: radius.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+  },
+  roleStatusLight: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  roleStatusDark: {
+    backgroundColor: colors.white,
+    borderColor: "rgba(255,255,255,0.25)",
+  },
+  roleStatusText: {
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  roleStatusTextLight: {
+    color: colors.white,
+  },
+  roleStatusTextDark: {
+    color: colors.ink,
   },
   roleIcon: {
     width: 54,

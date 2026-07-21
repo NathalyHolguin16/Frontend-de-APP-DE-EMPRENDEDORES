@@ -1,17 +1,23 @@
 import { Ionicons } from "@expo/vector-icons";
 import {
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    Image,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { colors, radius, shadows, spacing, typography } from "../theme/mercattoTheme";
 import { useMercatto } from "../context/MercattoContext";
+import {
+    colors,
+    radius,
+    shadows,
+    spacing,
+    typography,
+} from "../theme/mercattoTheme";
 
 export const logoSource = require("../../assets/images/icon.png");
 
@@ -21,7 +27,9 @@ export function Screen({ children, scroll = true, style, contentStyle }) {
     <SafeAreaView style={[styles.safeArea, style]}>
       <Wrapper
         contentInsetAdjustmentBehavior={scroll ? "automatic" : undefined}
-        contentContainerStyle={scroll ? [styles.scrollContent, contentStyle] : undefined}
+        contentContainerStyle={
+          scroll ? [styles.scrollContent, contentStyle] : undefined
+        }
         style={!scroll ? [styles.flex, contentStyle] : undefined}
       >
         {children}
@@ -33,9 +41,15 @@ export function Screen({ children, scroll = true, style, contentStyle }) {
 export function MercattoLogo({ size = 82, showName = true, light = false }) {
   return (
     <View style={styles.logoWrap}>
-      <Image source={logoSource} style={{ width: size, height: size, borderRadius: size * 0.28 }} resizeMode="contain" />
+      <Image
+        source={logoSource}
+        style={{ width: size, height: size, borderRadius: size * 0.28 }}
+        resizeMode="contain"
+      />
       {showName ? (
-        <Text style={[styles.logoName, light && { color: colors.white }]}>Mercatto</Text>
+        <Text style={[styles.logoName, light && { color: colors.white }]}>
+          Mercatto
+        </Text>
       ) : null}
     </View>
   );
@@ -72,16 +86,35 @@ export function PrimaryButton({
           color={secondary || ghost ? colors.primaryDark : colors.white}
         />
       ) : null}
-      <Text style={[styles.buttonText, (secondary || ghost) && styles.buttonTextSecondary]}>
+      <Text
+        style={[
+          styles.buttonText,
+          (secondary || ghost) && styles.buttonTextSecondary,
+        ]}
+      >
         {title}
       </Text>
     </Pressable>
   );
 }
 
-export function IconButton({ icon, onPress, badge, color = colors.ink, style }) {
+export function IconButton({
+  icon,
+  onPress,
+  badge,
+  color = colors.ink,
+  style,
+}) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed, style]}>
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.iconButton,
+        pressed && styles.pressed,
+        style,
+      ]}
+    >
       <Ionicons name={icon} size={22} color={color} />
       {badge ? (
         <View style={styles.badge}>
@@ -124,7 +157,13 @@ export function Field({
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
-      <View style={[styles.inputWrap, error && styles.inputError, multiline && styles.multilineWrap]}>
+      <View
+        style={[
+          styles.inputWrap,
+          error && styles.inputError,
+          multiline && styles.multilineWrap,
+        ]}
+      >
         <TextInput
           autoCapitalize="none"
           keyboardType={keyboardType}
@@ -150,12 +189,30 @@ export function Field({
 export function Chip({ label, icon, selected = false, onPress, tone }) {
   const content = (
     <>
-      {icon ? <Ionicons name={icon} size={16} color={selected ? colors.white : colors.ink} /> : null}
-      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
+      {icon ? (
+        <Ionicons
+          name={icon}
+          size={16}
+          color={selected ? colors.white : colors.ink}
+        />
+      ) : null}
+      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+        {label}
+      </Text>
     </>
   );
   if (!onPress) {
-    return <View style={[styles.chip, tone && { backgroundColor: tone }]}>{content}</View>;
+    return (
+      <View
+        style={[
+          styles.chip,
+          selected && styles.chipSelected,
+          tone && { backgroundColor: tone },
+        ]}
+      >
+        {content}
+      </View>
+    );
   }
   return (
     <Pressable
@@ -175,7 +232,9 @@ export function CheckboxRow({ label, checked, onPress }) {
   return (
     <Pressable onPress={onPress} style={styles.checkboxRow}>
       <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
-        {checked ? <Ionicons name="checkmark" size={16} color={colors.white} /> : null}
+        {checked ? (
+          <Ionicons name="checkmark" size={16} color={colors.white} />
+        ) : null}
       </View>
       <Text style={styles.checkboxLabel}>{label}</Text>
     </Pressable>
@@ -184,11 +243,18 @@ export function CheckboxRow({ label, checked, onPress }) {
 
 export function PasswordStrength({ result }) {
   const width = `${Math.max(16, result.score * 20)}%`;
-  const barColor = result.score <= 2 ? colors.red : result.score <= 4 ? colors.primary : colors.green;
+  const barColor =
+    result.score <= 2
+      ? colors.red
+      : result.score <= 4
+        ? colors.primary
+        : colors.green;
   return (
     <View style={styles.strengthWrap}>
       <View style={styles.strengthTrack}>
-        <View style={[styles.strengthBar, { width, backgroundColor: barColor }]} />
+        <View
+          style={[styles.strengthBar, { width, backgroundColor: barColor }]}
+        />
       </View>
       <Text style={styles.strengthText}>Fortaleza: {result.label}</Text>
       {[
@@ -198,7 +264,10 @@ export function PasswordStrength({ result }) {
         ["number", "Un número"],
         ["special", "Un signo especial"],
       ].map(([key, label]) => (
-        <Text key={key} style={[styles.rule, result.checks[key] && styles.ruleOk]}>
+        <Text
+          key={key}
+          style={[styles.rule, result.checks[key] && styles.ruleOk]}
+        >
           {result.checks[key] ? "✓" : "•"} {label}
         </Text>
       ))}
@@ -214,18 +283,43 @@ export function BuyerHeader({ navigation, title = "Hola, María" }) {
       <View style={styles.headerTop}>
         <View style={{ flex: 1 }}>
           <Text style={styles.greeting}>{title}</Text>
-          <Pressable onPress={() => navigation.navigate("CitySelect", { fromApp: true })} style={styles.cityRow}>
-            <Ionicons name="location-outline" size={16} color={colors.primaryDark} />
+          <Pressable
+            onPress={() => navigation.navigate("CitySelect", { fromApp: true })}
+            style={styles.cityRow}
+          >
+            <Ionicons
+              name="location-outline"
+              size={16}
+              color={colors.primaryDark}
+            />
             <Text style={styles.cityText}>{selectedCity}</Text>
-            <Ionicons name="chevron-down" size={15} color={colors.primaryDark} />
+            <Ionicons
+              name="chevron-down"
+              size={15}
+              color={colors.primaryDark}
+            />
           </Pressable>
         </View>
-        <IconButton icon="notifications-outline" onPress={() => navigation.navigate("StateScreen", { type: "notifications" })} />
-        <IconButton icon="cart-outline" badge={cartCount || null} onPress={() => navigation.navigate("Cart")} />
+        <IconButton
+          icon="notifications-outline"
+          onPress={() =>
+            navigation.navigate("StateScreen", { type: "notifications" })
+          }
+        />
+        <IconButton
+          icon="cart-outline"
+          badge={cartCount || null}
+          onPress={() => navigation.navigate("Cart")}
+        />
       </View>
-      <Pressable onPress={() => navigation.navigate("Address")} style={styles.addressRow}>
+      <Pressable
+        onPress={() => navigation.navigate("Address")}
+        style={styles.addressRow}
+      >
         <Ionicons name="navigate-outline" size={16} color={colors.muted} />
-        <Text numberOfLines={1} style={styles.addressText}>{deliveryAddress}</Text>
+        <Text numberOfLines={1} style={styles.addressText}>
+          {deliveryAddress}
+        </Text>
         <Text style={styles.changeText}>Cambiar</Text>
       </Pressable>
     </View>
@@ -247,10 +341,22 @@ export function SearchBar({ value, onChangeText, placeholder }) {
   );
 }
 
-export function BusinessCard({ business, onPress, favorite, onToggleFavorite }) {
+export function BusinessCard({
+  business,
+  onPress,
+  favorite,
+  onToggleFavorite,
+}) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.businessCard, pressed && styles.pressed]}>
-      <Image source={{ uri: business.hero }} style={styles.businessImage} resizeMode="cover" />
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.businessCard, pressed && styles.pressed]}
+    >
+      <Image
+        source={{ uri: business.hero }}
+        style={styles.businessImage}
+        resizeMode="cover"
+      />
       <View style={styles.favoriteFloating}>
         <IconButton
           icon={favorite ? "heart" : "heart-outline"}
@@ -264,17 +370,31 @@ export function BusinessCard({ business, onPress, favorite, onToggleFavorite }) 
           <Avatar label={business.logo} />
           <View style={{ flex: 1 }}>
             <Text style={styles.businessName}>{business.name}</Text>
-            <Text style={styles.businessDesc} numberOfLines={2}>{business.shortDescription}</Text>
+            <Text style={styles.businessDesc} numberOfLines={2}>
+              {business.shortDescription}
+            </Text>
           </View>
         </View>
         <View style={styles.metaRow}>
-          <Meta icon="star" label={`${business.rating} (${business.reviews})`} color={colors.primaryDark} />
+          <Meta
+            icon="star"
+            label={`${business.rating} (${business.reviews})`}
+            color={colors.primaryDark}
+          />
           <Meta icon="time-outline" label={business.deliveryTime} />
-          <Meta icon="bicycle-outline" label={`$${business.deliveryCost.toFixed(2)}`} />
+          <Meta
+            icon="bicycle-outline"
+            label={`$${business.deliveryCost.toFixed(2)}`}
+          />
         </View>
         <View style={styles.tagRow}>
-          <Chip label={business.status} tone={business.status === "Abierto" ? "#E9F7EF" : "#F1F1F1"} />
-          {business.tags.slice(0, 2).map((tag) => <Chip key={tag} label={tag} tone={colors.softOrange} />)}
+          <Chip
+            label={business.status}
+            tone={business.status === "Abierto" ? "#E9F7EF" : "#F1F1F1"}
+          />
+          {business.tags.slice(0, 2).map((tag) => (
+            <Chip key={tag} label={tag} tone={colors.softOrange} />
+          ))}
         </View>
       </View>
     </Pressable>
@@ -283,19 +403,37 @@ export function BusinessCard({ business, onPress, favorite, onToggleFavorite }) 
 
 export function ProductCard({ product, onPress, onAdd }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.productCard, pressed && styles.pressed]}>
-      <Image source={{ uri: product.image }} style={styles.productImage} resizeMode="cover" />
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.productCard, pressed && styles.pressed]}
+    >
+      <Image
+        source={{ uri: product.image }}
+        style={styles.productImage}
+        resizeMode="cover"
+      />
       <View style={styles.productContent}>
         <Text style={styles.productName}>{product.name}</Text>
-        <Text style={styles.productDesc} numberOfLines={2}>{product.description}</Text>
+        <Text style={styles.productDesc} numberOfLines={2}>
+          {product.description}
+        </Text>
         <View style={styles.priceRow}>
           <Text style={styles.price}>${product.price.toFixed(2)}</Text>
-          {product.oldPrice ? <Text style={styles.oldPrice}>${product.oldPrice.toFixed(2)}</Text> : null}
-          {product.discount ? <Text style={styles.discount}>{product.discount}%</Text> : null}
+          {product.oldPrice ? (
+            <Text style={styles.oldPrice}>${product.oldPrice.toFixed(2)}</Text>
+          ) : null}
+          {product.discount ? (
+            <Text style={styles.discount}>{product.discount}%</Text>
+          ) : null}
         </View>
         <View style={styles.productFooter}>
           <Chip label={product.badges[0]} tone={colors.softOrange} />
-          <IconButton icon="add" onPress={onAdd} color={colors.white} style={styles.addButton} />
+          <IconButton
+            icon="add"
+            onPress={onAdd}
+            color={colors.white}
+            style={styles.addButton}
+          />
         </View>
       </View>
     </Pressable>
@@ -304,8 +442,15 @@ export function ProductCard({ product, onPress, onAdd }) {
 
 export function PromoCard({ promo, businessName, onPress }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.promoCard, pressed && styles.pressed]}>
-      <Image source={{ uri: promo.image }} style={styles.promoImage} resizeMode="cover" />
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.promoCard, pressed && styles.pressed]}
+    >
+      <Image
+        source={{ uri: promo.image }}
+        style={styles.promoImage}
+        resizeMode="cover"
+      />
       <View style={styles.promoBody}>
         <Text style={styles.discountPill}>{promo.discount}% OFF</Text>
         <Text style={styles.productName}>{promo.name}</Text>
@@ -322,8 +467,15 @@ export function PromoCard({ promo, businessName, onPress }) {
 
 export function Avatar({ label, size = 46 }) {
   return (
-    <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}>
-      <Text style={[styles.avatarText, { fontSize: size * 0.34 }]}>{label}</Text>
+    <View
+      style={[
+        styles.avatar,
+        { width: size, height: size, borderRadius: size / 2 },
+      ]}
+    >
+      <Text style={[styles.avatarText, { fontSize: size * 0.34 }]}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -337,13 +489,21 @@ export function Meta({ icon, label, color = colors.muted }) {
   );
 }
 
-export function EmptyState({ icon = "file-tray-outline", title, message, action, onPress }) {
+export function EmptyState({
+  icon = "file-tray-outline",
+  title,
+  message,
+  action,
+  onPress,
+}) {
   return (
     <Card style={styles.emptyState}>
       <Ionicons name={icon} size={42} color={colors.primaryDark} />
       <Text style={typography.h3}>{title}</Text>
       <Text style={[typography.muted, { textAlign: "center" }]}>{message}</Text>
-      {action ? <PrimaryButton title={action} onPress={onPress} variant="secondary" /> : null}
+      {action ? (
+        <PrimaryButton title={action} onPress={onPress} variant="secondary" />
+      ) : null}
     </Card>
   );
 }

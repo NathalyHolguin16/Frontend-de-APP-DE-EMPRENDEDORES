@@ -15,7 +15,6 @@ import {
     Chip,
     Field,
     MercattoLogo,
-    PasswordStrength,
     PrimaryButton,
     Screen,
     SearchBar,
@@ -29,7 +28,7 @@ import {
     spacing,
     typography,
 } from "../../theme/mercattoTheme";
-import { isEmailOrPhone, validatePassword } from "../../utils/validation";
+import { isEmail, validatePassword } from "../../utils/validation";
 
 export function SplashScreen({ navigation }) {
   const scale = useRef(new Animated.Value(0.88)).current;
@@ -77,14 +76,14 @@ export function LoginScreen({ navigation }) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const submit = () => {
+  const submit = async () => {
     const nextErrors = {};
     if (!identifier.trim()) {
-      nextErrors.identifier = "Ingresa tu correo electrónico o número celular.";
-    } else if (!isEmailOrPhone(identifier)) {
-      nextErrors.identifier =
-        "Usa un correo válido o un celular ecuatoriano que inicie con 09.";
+      nextErrors.identifier = "Ingresa tu correo electrónico.";
+    } else if (!isEmail(identifier)) {
+      nextErrors.identifier = "Ingresa un correo electrónico válido.";
     }
     if (!password.trim()) {
       nextErrors.password = "Ingresa tu contraseña.";
@@ -92,12 +91,28 @@ export function LoginScreen({ navigation }) {
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
 
-    const nextUser = login({ identifier, password });
-    if (nextUser.profiles.length > 1) {
-      navigation.replace("ModeSelect");
-      return;
+    setIsSubmitting(true);
+    try {
+      const nextUser = await login({ identifier, password });
+      if (nextUser.profiles.length > 1) {
+        navigation.replace("ModeSelect");
+        return;
+      }
+      if (nextUser.backendAddressId) {
+        navigation.replace("BuyerTabs");
+        return;
+      }
+      navigation.replace("CitySelect", { fromLogin: true });
+    } catch (error) {
+      setErrors({
+        form:
+          error?.status === 422
+            ? "El correo o la contraseña son incorrectos."
+            : error?.message || "No pudimos conectar con Mercatto. Intenta nuevamente.",
+      });
+    } finally {
+      setIsSubmitting(false);
     }
-    navigation.replace("CitySelect", { fromLogin: true });
   };
 
   return (
@@ -107,16 +122,19 @@ export function LoginScreen({ navigation }) {
         <View style={{ alignItems: "center", gap: 6 }}>
           <Text style={typography.h2}>Bienvenido de vuelta</Text>
           <Text style={[typography.muted, { textAlign: "center" }]}>
-            Ingresa con tu correo o número celular para continuar.
+            Ingresa con tu correo electrónico para continuar.
           </Text>
         </View>
 
         <Card>
           <Field
-            label="Correo o celular"
-            placeholder="maria@correo.com o 0991234567"
+            label="Correo electrónico"
+            placeholder="maria@correo.com"
             value={identifier}
-            onChangeText={setIdentifier}
+            onChangeText={(value) => {
+              setIdentifier(value);
+              setErrors({});
+            }}
             error={errors.identifier}
           />
           <Field
@@ -129,13 +147,15 @@ export function LoginScreen({ navigation }) {
             onRightPress={() => setShowPassword((value) => !value)}
             error={errors.password}
           />
+          {errors.form ? <Text selectable style={styles.errorHint}>{errors.form}</Text> : null}
           <Pressable onPress={() => navigation.navigate("ForgotPassword")}>
             <Text style={styles.forgot}>¿Olvidaste tu contraseña?</Text>
           </Pressable>
           <PrimaryButton
-            title="Iniciar sesión"
+            title={isSubmitting ? "Iniciando sesión..." : "Iniciar sesión"}
             icon="log-in-outline"
             onPress={submit}
+            disabled={isSubmitting}
           />
           <Pressable
             onPress={() => navigation.navigate("RegisterRole")}
@@ -456,35 +476,56 @@ export function EntrepreneurRegisterScreen({ navigation }) {
 }
 
 function RegisterForm({ profileType, navigation }) {
+  const { registerUser } = useMercatto();
   const [data, setData] = useState({});
-  const update = (key, value) =>
+  const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const update = (key, value) => {
     setData((current) => ({ ...current, [key]: value }));
-  const genderOptions = [
-    "Femenino",
-    "Masculino",
-    "Otro",
-    "Prefiero no decirlo",
-  ];
+    setErrors((current) => ({ ...current, [key]: "", form: "" }));
+  };
   const fields = [
     ["names", "Nombres"],
     ["lastNames", "Apellidos"],
-    ["idNumber", "Número de cédula"],
-    ["birthDate", "Fecha de nacimiento"],
-    ["gender", "Género"],
-    ["address", "Dirección de domicilio"],
-    ["city", "Ciudad"],
-    ["sector", "Sector"],
-    ["reference", "Referencia de la dirección"],
-    ["phone", "Número de celular"],
     ["email", "Correo electrónico"],
   ];
-  const password = validatePassword(data.password || "");
-  const valid =
-    fields.every(([key]) => String(data[key] || "").trim()) &&
-    password.valid &&
-    data.password === data.confirmPassword &&
-    data.terms &&
-    data.privacy;
+
+  const submit = async () => {
+    const nextErrors = {};
+    if (!data.names?.trim()) nextErrors.names = "Ingresa tus nombres.";
+    if (!data.lastNames?.trim()) nextErrors.lastNames = "Ingresa tus apellidos.";
+    if (!data.email?.trim()) {
+      nextErrors.email = "Ingresa tu correo electrónico.";
+    } else if (!isEmail(data.email)) {
+      nextErrors.email = "Ingresa un correo electrónico válido.";
+    }
+    if (!validatePassword(data.password || "").valid) {
+      nextErrors.password = "Usa al menos 8 caracteres.";
+    }
+    if (!data.confirmPassword) {
+      nextErrors.confirmPassword = "Repite tu contraseña.";
+    } else if (data.password !== data.confirmPassword) {
+      nextErrors.confirmPassword = "Las contraseñas no coinciden.";
+    }
+    if (!data.legal) {
+      nextErrors.legal = "Debes aceptar los términos y la política de privacidad.";
+    }
+
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
+
+    setIsSubmitting(true);
+    try {
+      await registerUser({ profileType, data });
+      navigation.replace(profileType === "entrepreneur" ? "EntrepreneurTabs" : "CitySelect");
+    } catch (error) {
+      setErrors({
+        form: error?.message || "No pudimos crear la cuenta. Intenta nuevamente.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <Screen>
@@ -493,56 +534,42 @@ function RegisterForm({ profileType, navigation }) {
         Crea tu cuenta para comprar en emprendimientos de tu ciudad.
       </Text>
       <Card>
-        {fields.map(([key, label]) =>
-          key === "gender" ? (
-            <View key={key} style={styles.field}>
-              <Text style={styles.label}>{label}</Text>
-              <View style={styles.chipWrap}>
-                {genderOptions.map((option) => (
-                  <Chip
-                    key={option}
-                    label={option}
-                    selected={data.gender === option}
-                    onPress={() => update("gender", option)}
-                  />
-                ))}
-              </View>
-            </View>
-          ) : (
-            <Field
-              key={key}
-              label={label}
-              placeholder={placeholderFor(label)}
-              value={data[key] || ""}
-              onChangeText={(value) => update(key, value)}
-            />
-          ),
-        )}
-        <PasswordPair data={data} update={update} />
-        <LegalChecks data={data} update={update} />
-        {!valid ? (
-          <Text style={styles.errorHint}>
-            Completa todos los campos, acepta términos y usa una contraseña
-            fuerte.
-          </Text>
+        {fields.map(([key, label]) => (
+          <Field
+            key={key}
+            label={label}
+            placeholder={placeholderFor(label)}
+            value={data[key] || ""}
+            onChangeText={(value) => update(key, value)}
+            error={errors[key]}
+            keyboardType={key === "email" ? "email-address" : undefined}
+            autoCapitalize={key === "email" ? "none" : "words"}
+          />
+        ))}
+        <PasswordPair data={data} update={update} errors={errors} />
+        <CheckboxRow
+          label="Acepto los términos y la política de privacidad de Mercatto."
+          checked={!!data.legal}
+          onPress={() => update("legal", !data.legal)}
+        />
+        {errors.legal ? (
+          <Text style={styles.errorHint}>{errors.legal}</Text>
         ) : null}
+        {errors.form ? <Text selectable style={styles.errorHint}>{errors.form}</Text> : null}
         <PrimaryButton
-          title="Crear cuenta"
+          title={isSubmitting ? "Creando cuenta..." : "Crear cuenta"}
           icon="person-add-outline"
-          disabled={!valid}
-          onPress={() =>
-            navigation.navigate("Verification", { profileType, data })
-          }
+          disabled={isSubmitting}
+          onPress={submit}
         />
       </Card>
     </Screen>
   );
 }
 
-function PasswordPair({ data, update }) {
+function PasswordPair({ data, update, errors = {} }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const result = validatePassword(data.password || "");
   const mismatch =
     data.confirmPassword && data.password !== data.confirmPassword;
   return (
@@ -555,8 +582,8 @@ function PasswordPair({ data, update }) {
         onChangeText={(value) => update("password", value)}
         rightIcon={showPassword ? "eye-off-outline" : "eye-outline"}
         onRightPress={() => setShowPassword((value) => !value)}
+        error={errors.password}
       />
-      <PasswordStrength result={result} />
       <Field
         label="Confirmación de contraseña"
         placeholder="Repite tu contraseña"
@@ -565,7 +592,9 @@ function PasswordPair({ data, update }) {
         onChangeText={(value) => update("confirmPassword", value)}
         rightIcon={showConfirm ? "eye-off-outline" : "eye-outline"}
         onRightPress={() => setShowConfirm((value) => !value)}
-        error={mismatch ? "Las contraseñas no coinciden." : ""}
+        error={
+          mismatch ? "Las contraseñas no coinciden." : errors.confirmPassword
+        }
       />
       {data.confirmPassword && !mismatch ? (
         <Text style={styles.success}>Las contraseñas coinciden.</Text>
@@ -677,8 +706,9 @@ export function VerificationScreen({ route, navigation }) {
   const { profileType = "buyer", data = {}, purpose } = route.params || {};
   const [code, setCode] = useState("");
   const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const verify = () => {
+  const verify = async () => {
     if (code.length < 4) {
       setMessage("Ingresa el código de seguridad de 4 dígitos.");
       return;
@@ -687,10 +717,17 @@ export function VerificationScreen({ route, navigation }) {
       navigation.replace("Login");
       return;
     }
-    registerUser({ profileType, data });
-    navigation.replace(
-      profileType === "entrepreneur" ? "EntrepreneurTabs" : "CitySelect",
-    );
+    setIsSubmitting(true);
+    try {
+      await registerUser({ profileType, data });
+      navigation.replace(
+        profileType === "entrepreneur" ? "EntrepreneurTabs" : "CitySelect",
+      );
+    } catch (error) {
+      setMessage(error?.message || "No pudimos crear la cuenta. Intenta nuevamente.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -710,9 +747,10 @@ export function VerificationScreen({ route, navigation }) {
         />
         {message ? <Text style={styles.errorHint}>{message}</Text> : null}
         <PrimaryButton
-          title="Verificar y continuar"
+          title={isSubmitting ? "Creando cuenta..." : "Verificar y continuar"}
           icon="shield-checkmark-outline"
           onPress={verify}
+          disabled={isSubmitting}
         />
         <PrimaryButton
           title="Reenviar código"

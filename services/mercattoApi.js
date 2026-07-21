@@ -1,5 +1,6 @@
 const fallbackBaseUrl = "https://mercatto-back.onrender.com";
 const authTokenKey = "mercatto_auth_token";
+let webSessionToken = null;
 
 export const mercattoApiUrl = (
   process.env.EXPO_PUBLIC_MERCATTO_API_URL || fallbackBaseUrl
@@ -48,7 +49,7 @@ async function request(path, { method = "GET", body, token, timeoutMs } = {}) {
     }
   }
 
-  const maxRetries = 2;
+  const maxRetries = method === "GET" ? 2 : 0;
   let attempt = 0;
   let lastError;
 
@@ -81,10 +82,14 @@ async function request(path, { method = "GET", body, token, timeoutMs } = {}) {
           continue;
         }
 
+        const validationMessage =
+          typeof payload === "object" && payload?.errors
+            ? Object.values(payload.errors).flat().find(Boolean)
+            : null;
         const error = new Error(
           typeof payload === "string"
             ? payload
-            : payload?.message || payload?.error || "Request failed.",
+            : validationMessage || payload?.message || payload?.error || "No se pudo completar la solicitud.",
         );
         error.status = status;
         error.payload = payload;
@@ -114,24 +119,32 @@ async function request(path, { method = "GET", body, token, timeoutMs } = {}) {
 }
 
 export async function saveToken(token) {
-  const AsyncStorage = (
-    await import("@react-native-async-storage/async-storage")
-  ).default;
-  await AsyncStorage.setItem(authTokenKey, token);
+  if (process.env.EXPO_OS === "web") {
+    webSessionToken = token;
+    return;
+  }
+
+  const SecureStore = await import("expo-secure-store");
+  await SecureStore.setItemAsync(authTokenKey, token);
 }
 
 export async function getStoredToken() {
-  const AsyncStorage = (
-    await import("@react-native-async-storage/async-storage")
-  ).default;
-  return AsyncStorage.getItem(authTokenKey);
+  if (process.env.EXPO_OS === "web") {
+    return webSessionToken;
+  }
+
+  const SecureStore = await import("expo-secure-store");
+  return SecureStore.getItemAsync(authTokenKey);
 }
 
 export async function clearStoredToken() {
-  const AsyncStorage = (
-    await import("@react-native-async-storage/async-storage")
-  ).default;
-  await AsyncStorage.removeItem(authTokenKey);
+  if (process.env.EXPO_OS === "web") {
+    webSessionToken = null;
+    return;
+  }
+
+  const SecureStore = await import("expo-secure-store");
+  await SecureStore.deleteItemAsync(authTokenKey);
 }
 
 export async function registerUser(payload) {
@@ -157,6 +170,25 @@ export async function getMe(token) {
 export async function logoutUser(token) {
   return request("/api/logout", {
     method: "POST",
+    token,
+  });
+}
+
+export async function getAddresses(token) {
+  return request("/api/v1/client/addresses", { token });
+}
+
+export async function createAddress(payload, token) {
+  return request("/api/v1/client/addresses", {
+    method: "POST",
+    body: payload,
+    token,
+  });
+}
+
+export async function deleteAddress(addressId, token) {
+  return request(`/api/v1/client/addresses/${addressId}`, {
+    method: "DELETE",
     token,
   });
 }

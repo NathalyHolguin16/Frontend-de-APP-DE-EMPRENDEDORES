@@ -149,6 +149,7 @@ export function Field({
   placeholder,
   secureTextEntry,
   keyboardType,
+  autoCapitalize = "none",
   multiline = false,
   rightIcon,
   onRightPress,
@@ -165,7 +166,7 @@ export function Field({
         ]}
       >
         <TextInput
-          autoCapitalize="none"
+          autoCapitalize={autoCapitalize}
           keyboardType={keyboardType}
           multiline={multiline}
           onChangeText={onChangeText}

@@ -11,11 +11,15 @@ export function validatePassword(password) {
     checks,
     score,
     label: score <= 2 ? "Débil" : score <= 4 ? "Media" : "Fuerte",
-    valid: score === 5,
+    valid: checks.length,
   };
 }
 
 export function isEmailOrPhone(value) {
   const trimmed = value.trim();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed) || /^09\d{8}$/.test(trimmed);
+}
+
+export function isEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }

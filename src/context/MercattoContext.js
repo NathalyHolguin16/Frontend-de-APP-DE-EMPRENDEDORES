@@ -7,17 +7,24 @@ import {
   entrepreneurOrders,
   products,
 } from "../data/mercattoData";
+import {
+  clearStoredToken,
+  createAddress as createAddressRequest,
+  getAddresses,
+  loginUser,
+  logoutUser,
+  registerUser as registerUserRequest,
+  saveToken,
+} from "../../services/mercattoApi";
 
 const MercattoContext = createContext(null);
 
 export function MercattoProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [knownUsers, setKnownUsers] = useState({});
+  const [savedAddresses, setSavedAddresses] = useState([]);
   const [mode, setMode] = useState("buyer");
   const [selectedCity, setSelectedCity] = useState(cities[0]);
-  const [deliveryAddress, setDeliveryAddress] = useState(
-    "Av. 4 de Noviembre y calle 13",
-  );
+  const [deliveryAddress, setDeliveryAddress] = useState("");
   const [favorites, setFavorites] = useState(["dulce-orilla"]);
   const [cart, setCart] = useState({
     businessId: null,
@@ -29,60 +36,64 @@ export function MercattoProvider({ children }) {
   const [orders, setOrders] = useState(buyerOrders);
   const [sellerOrders, setSellerOrders] = useState(entrepreneurOrders);
 
-  const login = ({ identifier }) => {
-    const normalizedIdentifier = identifier?.trim().toLowerCase();
-    const rememberedUser = knownUsers[normalizedIdentifier];
+  const login = async ({ identifier, password }) => {
+    const response = await loginUser({
+      email: identifier.trim().toLowerCase(),
+      password,
+    });
+    await saveToken(response.token);
 
-    if (rememberedUser) {
-      setUser(rememberedUser);
-      setSelectedCity(rememberedUser.city || selectedCity);
-      setDeliveryAddress(rememberedUser.address || deliveryAddress);
-      return rememberedUser;
+    let addresses = [];
+    try {
+      const addressResponse = await getAddresses(response.token);
+      addresses = addressResponse?.data || [];
+    } catch {
+      addresses = [];
     }
 
-    const hasBothProfiles = !identifier || identifier.toLowerCase().includes("ambos");
-    const inferredName = inferNameFromIdentifier(identifier);
-    const [firstName, ...lastNameParts] = inferredName.split(" ");
-    const nextUser = {
-      firstName,
-      lastName: lastNameParts.join(" "),
-      name: inferredName,
-      idNumber: "Pendiente",
-      birthDate: "Pendiente",
-      gender: "Pendiente",
-      phone: identifier && !identifier.includes("@") ? identifier : "Pendiente",
-      email: identifier?.includes("@") ? identifier : "usuario@mercatto.ec",
-      city: selectedCity,
-      address: deliveryAddress,
-      profiles: hasBothProfiles ? ["buyer", "entrepreneur"] : ["buyer"],
-      photo: getInitials(inferredName),
-    };
+    const defaultAddress = getDefaultAddress(addresses);
+    const nextUser = normalizeApiUser(response.user, {
+      profiles: ["buyer"],
+      ...mapApiAddress(defaultAddress),
+    });
     setUser(nextUser);
+    setSavedAddresses(addresses);
+    if (nextUser.city) {
+      setSelectedCity(nextUser.city);
+    }
+    if (nextUser.address) {
+      setDeliveryAddress(nextUser.address);
+    }
     return nextUser;
   };
 
-  const registerUser = ({ profileType, data }) => {
-    const nextUser = {
+  const registerUser = async ({ profileType, data }) => {
+    const fullName = `${data.names || ""} ${data.lastNames || ""}`.trim();
+    const response = await registerUserRequest({
+      name: fullName,
+      email: String(data.email || "").trim().toLowerCase(),
+      password: data.password || "",
+      password_confirmation: data.confirmPassword || "",
+    });
+    await saveToken(response.token);
+
+    const nextUser = normalizeApiUser(response.user, {
       firstName: data.names || "Nuevo",
       lastName: data.lastNames || "Usuario",
-      name: `${data.names || "Nuevo"} ${data.lastNames || "Usuario"}`,
       idNumber: data.idNumber || "Sin registrar",
       birthDate: data.birthDate || "Pendiente",
       gender: data.gender || "Pendiente",
       phone: data.phone || "Pendiente",
       email: data.email || "usuario@mercatto.ec",
       city: data.city || selectedCity,
-      address: data.address || deliveryAddress,
+      homeAddress: data.address || "",
+      address: "",
       profiles: profileType === "entrepreneur" ? ["buyer", "entrepreneur"] : ["buyer"],
-      photo: getInitials(`${data.names || "Nuevo"} ${data.lastNames || "Usuario"}`),
-    };
+    });
     setUser(nextUser);
-    setKnownUsers((current) => ({
-      ...current,
-      [nextUser.email.trim().toLowerCase()]: nextUser,
-    }));
     setSelectedCity(nextUser.city);
-    setDeliveryAddress(nextUser.address);
+    setDeliveryAddress(nextUser.address || "");
+    setSavedAddresses([]);
     setMode(profileType === "entrepreneur" ? "entrepreneur" : "buyer");
     return nextUser;
   };
@@ -102,13 +113,6 @@ export function MercattoProvider({ children }) {
 
     setUser(nextUser);
 
-    if (nextUser.email) {
-      setKnownUsers((users) => ({
-        ...users,
-        [nextUser.email.trim().toLowerCase()]: nextUser,
-      }));
-    }
-
     if (patch.city) {
       setSelectedCity(patch.city);
     }
@@ -118,10 +122,34 @@ export function MercattoProvider({ children }) {
     }
   };
 
-  const logout = () => {
+  const saveDeliveryAddress = async ({ apiPayload, localAddress }) => {
+    const response = await createAddressRequest(apiPayload);
+    const savedAddress = response?.data || response;
+    const nextAddress = {
+      ...localAddress,
+      backendAddressId: savedAddress?.id,
+    };
+
+    setSavedAddresses((current) => [
+      savedAddress,
+      ...current.map((address) => ({ ...address, is_default: false })),
+    ]);
+    updateUserProfile(nextAddress);
+    return savedAddress;
+  };
+
+  const logout = async () => {
     setUser(null);
+    setSavedAddresses([]);
     setMode("buyer");
     setCart({ businessId: null, items: [], deliveryMode: "Delivery", paymentMethod: "Efectivo", coupon: "" });
+    try {
+      await logoutUser();
+    } catch {
+      // The local session must still close if the API is unavailable.
+    } finally {
+      await clearStoredToken();
+    }
   };
 
   const toggleFavorite = (businessId) => {
@@ -242,6 +270,7 @@ export function MercattoProvider({ children }) {
     mode,
     selectedCity,
     deliveryAddress,
+    savedAddresses,
     favorites,
     cart,
     orders,
@@ -259,6 +288,7 @@ export function MercattoProvider({ children }) {
     login,
     registerUser,
     updateUserProfile,
+    saveDeliveryAddress,
     logout,
     toggleFavorite,
     addToCart,
@@ -284,31 +314,48 @@ function getInitials(name) {
     .join("") || "M";
 }
 
-function inferNameFromIdentifier(identifier) {
-  if (!identifier) {
-    return "Usuario Mercatto";
-  }
+function normalizeApiUser(apiUser, extras = {}) {
+  const fullName = String(apiUser?.name || extras.name || "Usuario Mercatto").trim();
+  const [firstName = "Usuario", ...lastNameParts] = fullName.split(/\s+/);
+  const normalized = {
+    id: apiUser?.id,
+    firstName,
+    lastName: lastNameParts.join(" "),
+    name: fullName,
+    email: apiUser?.email || extras.email || "",
+    idNumber: "Pendiente",
+    birthDate: "Pendiente",
+    gender: "Pendiente",
+    phone: "Pendiente",
+    profiles: ["buyer"],
+    ...extras,
+  };
 
-  if (!identifier.includes("@")) {
-    return "Usuario Mercatto";
-  }
+  return {
+    ...normalized,
+    name: `${normalized.firstName} ${normalized.lastName}`.trim() || fullName,
+    photo: getInitials(`${normalized.firstName} ${normalized.lastName}`),
+  };
+}
 
-  const localPart = identifier
-    .split("@")[0]
-    .replace(/\d+/g, "")
-    .replace(/[._-]+/g, " ")
-    .trim();
+function getDefaultAddress(addresses) {
+  return addresses.find((address) => address.is_default) || addresses[0] || null;
+}
 
-  if (/nathaly/i.test(localPart) && /holguin/i.test(localPart)) {
-    return "Nathaly Holguin";
-  }
+function mapApiAddress(address) {
+  if (!address) return {};
 
-  const words = localPart
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
-
-  return words.length ? words.join(" ") : "Usuario Mercatto";
+  return {
+    backendAddressId: address.id,
+    city: address.city,
+    address: [address.street_main, address.street_secondary].filter(Boolean).join(" y "),
+    addressSector: "",
+    addressReference: address.reference === "Sin referencia" ? "" : address.reference,
+    addressCoordinates: {
+      latitude: Number(address.latitude),
+      longitude: Number(address.longitude),
+    },
+  };
 }
 
 export function useMercatto() {

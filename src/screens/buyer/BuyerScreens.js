@@ -62,6 +62,17 @@ const cityCoordinates = {
   "Santo Domingo": { latitude: -0.253, longitude: -79.1754 },
 };
 
+const cityProvinces = {
+  Manta: "Manabí",
+  Portoviejo: "Manabí",
+  Guayaquil: "Guayas",
+  Quito: "Pichincha",
+  Cuenca: "Azuay",
+  Loja: "Loja",
+  Ambato: "Tungurahua",
+  "Santo Domingo": "Santo Domingo de los Tsáchilas",
+};
+
 function matchMercattoCity(place) {
   const placeNames = [place.city, place.district, place.subregion, place.region]
     .filter(Boolean)
@@ -138,7 +149,9 @@ export function BuyerHomeScreen({ navigation }) {
           <Text style={styles.helloText}>Hola, {user?.firstName || "Usuario"}</Text>
           <Pressable onPress={() => navigation.navigate("Address")} style={styles.locationPill}>
             <Ionicons name="location-outline" size={17} color={colors.ink} />
-            <Text numberOfLines={1} style={styles.locationText}>{selectedCity} · {deliveryAddress}</Text>
+            <Text numberOfLines={1} style={styles.locationText}>
+              {deliveryAddress ? `${selectedCity} · ${deliveryAddress}` : "Configura tu dirección"}
+            </Text>
             <Text style={styles.locationAction}>Cambiar</Text>
           </Pressable>
         </View>
@@ -649,7 +662,7 @@ export function BuyerProfileScreen({ navigation }) {
         <InfoLine label="Cédula" value={user?.idNumber} />
         <InfoLine label="Fecha de nacimiento" value={user?.birthDate} />
         <InfoLine label="Género" value={user?.gender} />
-        <InfoLine label="Dirección principal" value={deliveryAddress} />
+        <InfoLine label="Dirección principal" value={deliveryAddress || "Sin configurar"} />
         <InfoLine label="Ciudad seleccionada" value={selectedCity} />
       </Card>
       <Card>
@@ -709,16 +722,17 @@ export function FavoritesScreen({ navigation }) {
 }
 
 export function AddressScreen({ navigation }) {
-  const { deliveryAddress, selectedCity, updateUserProfile, user } = useMercatto();
+  const { deliveryAddress, saveDeliveryAddress, selectedCity, updateUserProfile, user } = useMercatto();
   const [address, setAddress] = useState(deliveryAddress);
   const [city, setCity] = useState(selectedCity);
   const [detectedSector, setDetectedSector] = useState(user?.addressSector || "");
   const [reference, setReference] = useState(user?.addressReference || "");
   const [message, setMessage] = useState("");
   const [coordinates, setCoordinates] = useState(
-    cityCoordinates[selectedCity] || cityCoordinates.Manta,
+    user?.addressCoordinates || cityCoordinates[selectedCity] || cityCoordinates.Manta,
   );
   const [isLocating, setIsLocating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [locationConfirmed, setLocationConfirmed] = useState(Boolean(deliveryAddress));
 
   const selectCity = (nextCity) => {
@@ -831,7 +845,7 @@ export function AddressScreen({ navigation }) {
     }
   };
 
-  const saveAddress = () => {
+  const saveAddress = async () => {
     if (!address.trim()) {
       setMessage("Selecciona o busca una dirección antes de guardar.");
       return;
@@ -842,14 +856,54 @@ export function AddressScreen({ navigation }) {
       return;
     }
 
-    updateUserProfile({
+    const localAddress = {
       city,
       address: address.trim(),
       addressSector: detectedSector.trim(),
       addressReference: reference.trim(),
       addressCoordinates: coordinates,
-    });
-    navigation.goBack();
+    };
+
+    setIsSaving(true);
+    setMessage("Guardando la dirección en Mercatto...");
+    try {
+      await saveDeliveryAddress({
+        apiPayload: {
+          alias: "Dirección principal",
+          province: cityProvinces[city] || city,
+          city,
+          street_main: address.trim(),
+          street_secondary: null,
+          reference: reference.trim() || "Sin referencia",
+          latitude: coordinates.latitude,
+          longitude: coordinates.longitude,
+          is_default: true,
+        },
+        localAddress,
+      });
+      navigation.goBack();
+    } catch (error) {
+      if (!error?.status || error.status >= 500) {
+        updateUserProfile({ ...localAddress, addressSyncStatus: "pending" });
+        setMessage("Dirección guardada temporalmente. La sincronización con el servidor quedó pendiente.");
+        Alert.alert(
+          "Dirección guardada temporalmente",
+          "Mercatto no pudo sincronizarla con el servidor. Podrás usarla durante esta sesión.",
+          [{ text: "Entendido", onPress: () => navigation.goBack() }],
+        );
+        return;
+      }
+
+      setMessage(
+        error.status === 401
+          ? "Tu sesión venció. Inicia sesión nuevamente para guardar la dirección."
+          : error.status === 422
+            ? error.message || "Revisa los datos de la dirección e intenta nuevamente."
+            : "No pudimos guardar la dirección. Intenta nuevamente.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -899,7 +953,12 @@ export function AddressScreen({ navigation }) {
         </View>
         <Field label="Referencia (opcional)" value={reference} onChangeText={setReference} placeholder="Casa, edificio o punto visible" multiline />
         {message ? <Text selectable style={styles.addressMessage}>{message}</Text> : null}
-        <PrimaryButton title="Confirmar dirección" icon="checkmark-circle-outline" onPress={saveAddress} disabled={isLocating} />
+        <PrimaryButton
+          title={isSaving ? "Guardando dirección..." : "Confirmar dirección"}
+          icon="checkmark-circle-outline"
+          onPress={saveAddress}
+          disabled={isLocating || isSaving}
+        />
       </Card>
     </Screen>
   );

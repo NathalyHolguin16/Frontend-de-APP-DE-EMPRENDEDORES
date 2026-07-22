@@ -1,34 +1,43 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import { useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    KeyboardAvoidingView,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Animated,
+  KeyboardAvoidingView,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 
-import {
-    Card,
-    CheckboxRow,
-    Chip,
-    Field,
-    MercattoLogo,
-    PrimaryButton,
-    Screen,
-    SearchBar,
-} from "../../components/MercattoUI";
+import AddressMap from "../../components/address-map";
 import BirthDateField from "../../components/birth-date-field";
 import GenderSelector from "../../components/gender-selector";
-import { useMercatto } from "../../context/MercattoContext";
-import { cities, formSteps } from "../../data/mercattoData";
 import {
-    colors,
-    radius,
-    shadows,
-    spacing,
-    typography,
+  Card,
+  CheckboxRow,
+  Chip,
+  Field,
+  MercattoLogo,
+  PrimaryButton,
+  Screen,
+  SearchBar,
+} from "../../components/MercattoUI";
+import { useMercatto } from "../../context/MercattoContext";
+import {
+  cities,
+  cityCoordinates,
+  cityProvinces,
+  formSteps,
+  matchMercattoCity,
+} from "../../data/mercattoData";
+import {
+  colors,
+  radius,
+  shadows,
+  spacing,
+  typography,
 } from "../../theme/mercattoTheme";
 import { isEmail, validatePassword } from "../../utils/validation";
 
@@ -110,7 +119,8 @@ export function LoginScreen({ navigation }) {
         form:
           error?.status === 422
             ? "El correo o la contraseña son incorrectos."
-            : error?.message || "No pudimos conectar con Mercatto. Intenta nuevamente.",
+            : error?.message ||
+              "No pudimos conectar con Mercatto. Intenta nuevamente.",
       });
     } finally {
       setIsSubmitting(false);
@@ -149,7 +159,11 @@ export function LoginScreen({ navigation }) {
             onRightPress={() => setShowPassword((value) => !value)}
             error={errors.password}
           />
-          {errors.form ? <Text selectable style={styles.errorHint}>{errors.form}</Text> : null}
+          {errors.form ? (
+            <Text selectable style={styles.errorHint}>
+              {errors.form}
+            </Text>
+          ) : null}
           <Pressable onPress={() => navigation.navigate("ForgotPassword")}>
             <Text style={styles.forgot}>¿Olvidaste tu contraseña?</Text>
           </Pressable>
@@ -515,7 +529,8 @@ function RegisterForm({ profileType, navigation }) {
   const submit = async () => {
     const nextErrors = {};
     if (!data.names?.trim()) nextErrors.names = "Ingresa tus nombres.";
-    if (!data.lastNames?.trim()) nextErrors.lastNames = "Ingresa tus apellidos.";
+    if (!data.lastNames?.trim())
+      nextErrors.lastNames = "Ingresa tus apellidos.";
     if (!data.email?.trim()) {
       nextErrors.email = "Ingresa tu correo electrónico.";
     } else if (!isEmail(data.email)) {
@@ -530,7 +545,8 @@ function RegisterForm({ profileType, navigation }) {
       nextErrors.confirmPassword = "Las contraseñas no coinciden.";
     }
     if (!data.legal) {
-      nextErrors.legal = "Debes aceptar los términos y la política de privacidad.";
+      nextErrors.legal =
+        "Debes aceptar los términos y la política de privacidad.";
     }
 
     setErrors(nextErrors);
@@ -539,10 +555,13 @@ function RegisterForm({ profileType, navigation }) {
     setIsSubmitting(true);
     try {
       await registerUser({ profileType, data });
-      navigation.replace(profileType === "entrepreneur" ? "EntrepreneurTabs" : "CitySelect");
+      navigation.replace(
+        profileType === "entrepreneur" ? "EntrepreneurTabs" : "CitySelect",
+      );
     } catch (error) {
       setErrors({
-        form: error?.message || "No pudimos crear la cuenta. Intenta nuevamente.",
+        form:
+          error?.message || "No pudimos crear la cuenta. Intenta nuevamente.",
       });
     } finally {
       setIsSubmitting(false);
@@ -577,7 +596,11 @@ function RegisterForm({ profileType, navigation }) {
         {errors.legal ? (
           <Text style={styles.errorHint}>{errors.legal}</Text>
         ) : null}
-        {errors.form ? <Text selectable style={styles.errorHint}>{errors.form}</Text> : null}
+        {errors.form ? (
+          <Text selectable style={styles.errorHint}>
+            {errors.form}
+          </Text>
+        ) : null}
         <PrimaryButton
           title={isSubmitting ? "Creando cuenta..." : "Crear cuenta"}
           icon="person-add-outline"
@@ -746,7 +769,9 @@ export function VerificationScreen({ route, navigation }) {
         profileType === "entrepreneur" ? "EntrepreneurTabs" : "CitySelect",
       );
     } catch (error) {
-      setMessage(error?.message || "No pudimos crear la cuenta. Intenta nuevamente.");
+      setMessage(
+        error?.message || "No pudimos crear la cuenta. Intenta nuevamente.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -785,14 +810,120 @@ export function VerificationScreen({ route, navigation }) {
 }
 
 export function CitySelectScreen({ route, navigation }) {
-  const { selectedCity, setSelectedCity } = useMercatto();
+  const { selectedCity, setSelectedCity, saveDeliveryAddress } = useMercatto();
   const [query, setQuery] = useState("");
   const [nextCity, setNextCity] = useState(selectedCity);
+  const [coordinates, setCoordinates] = useState(
+    cityCoordinates[selectedCity] || cityCoordinates.Manta,
+  );
+  const [detectedAddress, setDetectedAddress] = useState("");
+  const [detectedSector, setDetectedSector] = useState("");
+  const [addressConfirmed, setAddressConfirmed] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState("");
   const filtered = cities.filter((city) =>
     city.toLowerCase().includes(query.toLowerCase()),
   );
-  const continueToApp = () => {
+
+  const selectCity = (city) => {
+    setNextCity(city);
+    setCoordinates(cityCoordinates[city] || cityCoordinates.Manta);
+    setAddressConfirmed(false);
+    setDetectedAddress("");
+    setMessage("");
+  };
+
+  const resolveMapPoint = async (nextCoordinates) => {
+    setCoordinates(nextCoordinates);
+    setIsLocating(true);
+    try {
+      const [place] = await Location.reverseGeocodeAsync(nextCoordinates);
+      const detectedCity = place ? matchMercattoCity(place) : null;
+      if (detectedCity && place) {
+        const streetAddress = [place.street || place.name, place.streetNumber]
+          .filter(Boolean)
+          .join(" ");
+        setNextCity(detectedCity);
+        setDetectedAddress(streetAddress || place.formattedAddress || "");
+        setDetectedSector(place.district || place.subregion || "");
+        setAddressConfirmed(true);
+        setMessage(
+          `Ubicación detectada en ${detectedCity}. Ya quedará como tu dirección de entrega.`,
+        );
+      } else {
+        setAddressConfirmed(false);
+        setMessage("No pudimos reconocer una ciudad de Mercatto en ese punto.");
+      }
+    } catch {
+      setAddressConfirmed(false);
+      setMessage("No pudimos consultar la dirección de ese punto.");
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
+  const useCurrentLocation = async () => {
+    setIsLocating(true);
+    setMessage("Buscando tu ubicación actual...");
+
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") {
+        setMessage("Activa el permiso de ubicación para detectar tu ciudad.");
+        return;
+      }
+
+      const current = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      await resolveMapPoint({
+        latitude: current.coords.latitude,
+        longitude: current.coords.longitude,
+      });
+    } catch {
+      setMessage(
+        "No pudimos obtener tu ubicación. Selecciona tu ciudad manualmente.",
+      );
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
+  const continueToApp = async () => {
     setSelectedCity(nextCity);
+
+    if (addressConfirmed && detectedAddress) {
+      setIsSaving(true);
+      try {
+        await saveDeliveryAddress({
+          apiPayload: {
+            alias: "Dirección principal",
+            province: cityProvinces[nextCity] || nextCity,
+            city: nextCity,
+            street_main: detectedAddress,
+            street_secondary: null,
+            reference: detectedSector || "Sin referencia",
+            latitude: coordinates.latitude,
+            longitude: coordinates.longitude,
+            is_default: true,
+          },
+          localAddress: {
+            city: nextCity,
+            address: detectedAddress,
+            addressSector: detectedSector,
+            addressReference: "",
+            addressCoordinates: coordinates,
+          },
+        });
+      } catch {
+        // If the server sync fails, the person can still complete or fix the
+        // address later from "Configura tu dirección" — this isn't blocking.
+      } finally {
+        setIsSaving(false);
+      }
+    }
+
     if (route.params?.fromApp) {
       navigation.goBack();
       return;
@@ -812,12 +943,27 @@ export function CitySelectScreen({ route, navigation }) {
         onChangeText={setQuery}
         placeholder="Buscar ciudad"
       />
+      <View style={styles.mapHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={typography.h3}>Confirma tu ubicación</Text>
+          <Text style={typography.muted}>
+            Mueve el mapa o usa tu ubicación actual.
+          </Text>
+        </View>
+        {isLocating ? <ActivityIndicator color={colors.primaryDark} /> : null}
+      </View>
+      <AddressMap
+        coordinates={coordinates}
+        onCoordinateChange={resolveMapPoint}
+      />
       <PrimaryButton
         title="Usar ubicación actual"
         icon="locate-outline"
         variant="secondary"
-        onPress={() => setNextCity("Manta")}
+        onPress={useCurrentLocation}
+        disabled={isLocating}
       />
+      {message ? <Text style={styles.locationMessage}>{message}</Text> : null}
       <SectionTitle text="Ciudades populares" />
       <View style={styles.chipWrap}>
         {cities.slice(0, 5).map((city) => (
@@ -825,7 +971,7 @@ export function CitySelectScreen({ route, navigation }) {
             key={city}
             label={city}
             selected={nextCity === city}
-            onPress={() => setNextCity(city)}
+            onPress={() => selectCity(city)}
           />
         ))}
       </View>
@@ -834,7 +980,7 @@ export function CitySelectScreen({ route, navigation }) {
         {filtered.map((city) => (
           <Pressable
             key={city}
-            onPress={() => setNextCity(city)}
+            onPress={() => selectCity(city)}
             style={styles.cityOption}
           >
             <Text style={styles.cityOptionText}>{city}</Text>
@@ -849,9 +995,10 @@ export function CitySelectScreen({ route, navigation }) {
         ))}
       </Card>
       <PrimaryButton
-        title="Continuar"
+        title={isSaving ? "Guardando dirección..." : "Continuar"}
         icon="arrow-forward-outline"
         onPress={continueToApp}
+        disabled={isLocating || isSaving}
       />
     </Screen>
   );
@@ -874,6 +1021,15 @@ function placeholderFor(label) {
 }
 
 const styles = StyleSheet.create({
+  mapHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  locationMessage: {
+    color: colors.muted,
+    fontSize: 13,
+  },
   splash: {
     backgroundColor: colors.primary,
   },

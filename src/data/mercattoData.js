@@ -10,7 +10,61 @@ export const cities = [
   "Machala",
   "Riobamba",
   "Esmeraldas",
+  "Montecristi",
 ];
+
+export const cityCoordinates = {
+  Manta: { latitude: -0.9677, longitude: -80.7089 },
+  Portoviejo: { latitude: -1.0546, longitude: -80.4545 },
+  Guayaquil: { latitude: -2.171, longitude: -79.9224 },
+  Quito: { latitude: -0.1807, longitude: -78.4678 },
+  Cuenca: { latitude: -2.9001, longitude: -79.0059 },
+  Loja: { latitude: -3.9931, longitude: -79.2042 },
+  Ambato: { latitude: -1.2491, longitude: -78.6168 },
+  "Santo Domingo": { latitude: -0.253, longitude: -79.1754 },
+  Machala: { latitude: -3.2581, longitude: -79.9554 },
+  Riobamba: { latitude: -1.6636, longitude: -78.6546 },
+  Esmeraldas: { latitude: 0.9682, longitude: -79.6517 },
+  Montecristi: { latitude: -1.0455, longitude: -80.6592 },
+};
+
+export const cityProvinces = {
+  Manta: "Manabí",
+  Portoviejo: "Manabí",
+  Guayaquil: "Guayas",
+  Quito: "Pichincha",
+  Cuenca: "Azuay",
+  Loja: "Loja",
+  Ambato: "Tungurahua",
+  "Santo Domingo": "Santo Domingo de los Tsáchilas",
+  Machala: "El Oro",
+  Riobamba: "Chimborazo",
+  Esmeraldas: "Esmeraldas",
+  Montecristi: "Manabí",
+};
+
+export function matchMercattoCity(place) {
+  const placeNames = [place.city, place.district, place.subregion, place.region]
+    .filter(Boolean)
+    .map((value) =>
+      value
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase(),
+    );
+
+  return cities.find((city) => {
+    const normalizedCity = city
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+    return placeNames.some(
+      (placeName) =>
+        placeName.includes(normalizedCity) ||
+        normalizedCity.includes(placeName),
+    );
+  });
+}
 
 export const categories = [
   { id: "food", label: "Comida", icon: "restaurant-outline" },
@@ -54,10 +108,12 @@ export const businesses = [
     name: "Dulce Orilla",
     logo: "DO",
     hero: "https://images.unsplash.com/photo-1488477181946-6428a0291777?auto=format&fit=crop&w=900&q=80",
-    cover: "https://images.unsplash.com/photo-1551024506-0bccd828d307?auto=format&fit=crop&w=1200&q=80",
+    cover:
+      "https://images.unsplash.com/photo-1551024506-0bccd828d307?auto=format&fit=crop&w=1200&q=80",
     category: "Postres",
     subcategory: "Repostería artesanal",
-    shortDescription: "Tortas frías, cupcakes y detalles dulces hechos bajo pedido.",
+    shortDescription:
+      "Tortas frías, cupcakes y detalles dulces hechos bajo pedido.",
     about:
       "Somos un emprendimiento familiar manabita que prepara postres frescos con recetas propias. Cada pedido se arma el mismo día para conservar textura, sabor y una presentación bonita.",
     rating: 4.8,
@@ -75,7 +131,10 @@ export const businesses = [
     modality: ["Bajo pedido", "Delivery", "Retiro disponible"],
     tags: ["Más vendido", "Envío gratis", "Producto personalizado"],
     paymentMethods: ["Efectivo", "Transferencia", "Pago al retirar"],
-    policies: ["Cambios con 24h de anticipación", "Pedidos personalizados no reembolsables"],
+    policies: [
+      "Cambios con 24h de anticipación",
+      "Pedidos personalizados no reembolsables",
+    ],
     socials: "@dulceorilla.ec",
     contact: "099 321 8855",
     whatsapp: "https://wa.me/593993218855",
@@ -85,10 +144,12 @@ export const businesses = [
     name: "Raíz Manta",
     logo: "RM",
     hero: "https://images.unsplash.com/photo-1528698827591-e19ccd7bc23d?auto=format&fit=crop&w=900&q=80",
-    cover: "https://images.unsplash.com/photo-1528698827591-e19ccd7bc23d?auto=format&fit=crop&w=1200&q=80",
+    cover:
+      "https://images.unsplash.com/photo-1528698827591-e19ccd7bc23d?auto=format&fit=crop&w=1200&q=80",
     category: "Artesanías",
     subcategory: "Decoración",
-    shortDescription: "Macramé, fibras naturales y piezas decorativas para el hogar.",
+    shortDescription:
+      "Macramé, fibras naturales y piezas decorativas para el hogar.",
     about:
       "Creamos objetos decorativos con fibras naturales, tonos cálidos y acabados manuales. Trabajamos con pedidos personalizados para hogares, oficinas y regalos.",
     rating: 4.7,
@@ -106,7 +167,10 @@ export const businesses = [
     modality: ["Solo en línea", "Punto de encuentro", "Bajo pedido"],
     tags: ["Nuevo", "Bajo pedido", "Retiro disponible"],
     paymentMethods: ["Transferencia", "Billetera digital"],
-    policies: ["Productos personalizados requieren anticipo", "Garantía por fallas de fabricación"],
+    policies: [
+      "Productos personalizados requieren anticipo",
+      "Garantía por fallas de fabricación",
+    ],
     socials: "@raizmanta",
     contact: "098 552 1900",
     whatsapp: "https://wa.me/593985521900",
@@ -116,7 +180,8 @@ export const businesses = [
     name: "Brava Market",
     logo: "BM",
     hero: "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=900&q=80",
-    cover: "https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=1200&q=80",
+    cover:
+      "https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=1200&q=80",
     category: "Ropa",
     subcategory: "Moda urbana",
     shortDescription: "Prendas cómodas, accesorios y lanzamientos semanales.",
@@ -137,7 +202,10 @@ export const businesses = [
     modality: ["Local físico", "Delivery", "Retiro disponible"],
     tags: ["Oferta", "Retiro disponible"],
     paymentMethods: ["Efectivo", "Tarjeta", "Transferencia"],
-    policies: ["Cambios dentro de 7 días", "Prendas en oferta no tienen devolución"],
+    policies: [
+      "Cambios dentro de 7 días",
+      "Prendas en oferta no tienen devolución",
+    ],
     socials: "@bravamarket.ec",
     contact: "096 777 4112",
     whatsapp: "https://wa.me/593967774112",
@@ -149,8 +217,10 @@ export const products = [
     id: "cheesecake-maracuya",
     businessId: "dulce-orilla",
     name: "Cheesecake de maracuyá",
-    image: "https://images.unsplash.com/photo-1533134242443-d4fd215305ad?auto=format&fit=crop&w=900&q=80",
-    description: "Postre frío con base crocante, crema suave y reducción natural de maracuyá.",
+    image:
+      "https://images.unsplash.com/photo-1533134242443-d4fd215305ad?auto=format&fit=crop&w=900&q=80",
+    description:
+      "Postre frío con base crocante, crema suave y reducción natural de maracuyá.",
     fullDescription:
       "Incluye porción generosa, topping extra y empaque seguro. Ideal para regalos o reuniones pequeñas.",
     price: 5.5,
@@ -167,8 +237,10 @@ export const products = [
     id: "box-cupcakes",
     businessId: "dulce-orilla",
     name: "Box de cupcakes personalizados",
-    image: "https://images.unsplash.com/photo-1519869325930-281384150729?auto=format&fit=crop&w=900&q=80",
-    description: "Caja de seis cupcakes con colores, sabores y mensajes a elección.",
+    image:
+      "https://images.unsplash.com/photo-1519869325930-281384150729?auto=format&fit=crop&w=900&q=80",
+    description:
+      "Caja de seis cupcakes con colores, sabores y mensajes a elección.",
     fullDescription:
       "Puedes elegir vainilla, chocolate o red velvet. Acepta observaciones para colores y dedicatorias.",
     price: 12,
@@ -185,7 +257,8 @@ export const products = [
     id: "lampara-macrame",
     businessId: "raiz-manta",
     name: "Lámpara de macramé",
-    image: "https://images.unsplash.com/photo-1615873968403-89e068629265?auto=format&fit=crop&w=900&q=80",
+    image:
+      "https://images.unsplash.com/photo-1615873968403-89e068629265?auto=format&fit=crop&w=900&q=80",
     description: "Pieza decorativa tejida a mano con fibra natural.",
     fullDescription:
       "Disponible en tonos arena, blanco y terracota. Se entrega con guía de instalación básica.",
@@ -203,7 +276,8 @@ export const products = [
     id: "camiseta-brava",
     businessId: "brava-market",
     name: "Camiseta Brava básica",
-    image: "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=900&q=80",
+    image:
+      "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=900&q=80",
     description: "Camiseta de algodón con corte relajado y colores neutros.",
     fullDescription:
       "Tela suave, costuras reforzadas y disponibilidad por tallas. Cambios permitidos si conserva etiqueta.",
@@ -224,7 +298,8 @@ export const promotions = [
     id: "promo1",
     businessId: "dulce-orilla",
     name: "Combo dulce tarde",
-    image: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=900&q=80",
+    image:
+      "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=900&q=80",
     oldPrice: 16,
     price: 12.5,
     discount: 22,
@@ -236,7 +311,8 @@ export const promotions = [
     id: "promo2",
     businessId: "raiz-manta",
     name: "Envío gratis en decoración",
-    image: "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=900&q=80",
+    image:
+      "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=900&q=80",
     oldPrice: 2.5,
     price: 0,
     discount: 100,
@@ -248,7 +324,8 @@ export const promotions = [
     id: "promo3",
     businessId: "brava-market",
     name: "Segunda prenda al 30%",
-    image: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=80",
+    image:
+      "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=80",
     oldPrice: 22,
     price: 15.4,
     discount: 30,
@@ -307,7 +384,8 @@ export const entrepreneurProfile = {
   website: "dulceorilla.ec",
   about:
     "Postres artesanales preparados bajo pedido con ingredientes frescos, empaques cuidados y entregas puntuales.",
-  policies: "Pedidos personalizados con 24 horas de anticipación. Cambios sujetos a disponibilidad.",
+  policies:
+    "Pedidos personalizados con 24 horas de anticipación. Cambios sujetos a disponibilidad.",
 };
 
 export const entrepreneurStats = [

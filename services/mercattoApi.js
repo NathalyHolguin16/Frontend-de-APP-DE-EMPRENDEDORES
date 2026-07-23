@@ -282,10 +282,13 @@ export async function createStore(payload, token) {
 }
 
 export async function updateStore(storeId, payload, token) {
+  const multipart =
+    typeof FormData !== "undefined" && payload instanceof FormData;
   return request(`/api/stores/${storeId}`, {
-    method: "PUT",
+    method: multipart ? "POST" : "PUT",
     body: payload,
     token,
+    timeoutMs: multipart ? 20000 : undefined,
   });
 }
 

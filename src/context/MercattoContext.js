@@ -42,10 +42,16 @@ import {
   loadStoredCart,
   loadStoredOrders,
   loadStoredSellerOrders,
+  loadStoredStoreCover,
   saveStoredCart,
   saveStoredOrders,
   saveStoredSellerOrders,
+  saveStoredStoreCover,
 } from "../../services/localPersistence";
+import {
+  createStoreFormData,
+  persistStoreCover,
+} from "../../services/storeMedia";
 
 const MercattoContext = createContext(null);
 
@@ -155,6 +161,23 @@ export function MercattoProvider({ children }) {
     );
   }, [businesses, products]);
 
+  useEffect(() => {
+    if (
+      !myStore?.id ||
+      !myStore?.cover ||
+      myStore.coverPersistence !== "local"
+    ) {
+      return;
+    }
+    setBusinesses((current) =>
+      current.map((business) =>
+        business.id === myStore.id
+          ? { ...business, hero: myStore.cover, cover: myStore.cover }
+          : business,
+      ),
+    );
+  }, [myStore]);
+
   const syncBuyerOrderRecords = async (sourceOrders, token) => {
     const results = await Promise.allSettled(
       sourceOrders.map((order) =>
@@ -228,19 +251,31 @@ export function MercattoProvider({ children }) {
       profiles: apiStore ? ["buyer", "entrepreneur"] : ["buyer"],
       ...mapApiAddress(defaultAddress),
     });
-    const [storedCart, storedOrders, storedSellerOrders] = await Promise.all([
+    const mappedStore = apiStore ? mapApiStore(apiStore) : null;
+    const [storedCart, storedOrders, storedSellerOrders, storedStoreCover] = await Promise.all([
       loadStoredCart(nextUser),
       loadStoredOrders(nextUser),
       loadStoredSellerOrders(nextUser),
+      mappedStore?.id
+        ? loadStoredStoreCover(nextUser, mappedStore.id)
+        : Promise.resolve(null),
     ]);
-    const mappedStore = apiStore ? mapApiStore(apiStore) : null;
+    const hydratedStore =
+      mappedStore && storedStoreCover?.uri && !getApiStoreCover(apiStore)
+        ? {
+            ...mappedStore,
+            hero: storedStoreCover.uri,
+            cover: storedStoreCover.uri,
+            coverPersistence: "local",
+          }
+        : mappedStore;
     const mappedBuyerOrders = await syncBuyerOrderRecords(
       storedOrders,
       response.token,
     );
     const remoteSellerOrders = apiSellerOrders.map((order) =>
       mapApiOrder(order, {
-        store: mappedStore,
+        store: hydratedStore,
         catalogProducts: products,
         catalogBusinesses: businesses,
       }),
@@ -253,7 +288,7 @@ export function MercattoProvider({ children }) {
     setCart(normalizeStoredCart(storedCart));
     setUser(nextUser);
     setSavedAddresses(addresses);
-    setMyStore(mappedStore);
+    setMyStore(hydratedStore);
     setOrders(mappedBuyerOrders);
     setSellerOrders(mappedSellerOrders);
     setIsOrdersLoading(false);
@@ -687,18 +722,55 @@ export function MercattoProvider({ children }) {
   };
 
   const saveStore = async (payload) => {
-    const requestPayload = {
+    const fields = {
       name: payload.name.trim(),
       description: payload.description?.trim() || null,
       phone: payload.phone.trim(),
       slug: createSlug(payload.slug || payload.name),
     };
+    const hasNewCover = !!payload.cover?.uri;
+    const requestPayload = hasNewCover
+      ? createStoreFormData(fields, payload.cover, !!myStore?.id)
+      : fields;
     const response = myStore?.id
       ? await updateStoreRequest(myStore.id, requestPayload)
       : await createStoreRequest(requestPayload);
-    const nextStore = mapApiStore(response);
+    const mappedStore = mapApiStore(response);
+    const remoteCover = getApiStoreCover(response);
+    const persistedCover = hasNewCover
+      ? await persistStoreCover(payload.cover, mappedStore.id)
+      : myStore?.coverPersistence === "local"
+        ? {
+            uri: myStore.cover,
+            fileName: "portada.jpg",
+            mimeType: "image/jpeg",
+          }
+        : null;
+    if (persistedCover?.uri && user) {
+      await saveStoredStoreCover(user, mappedStore.id, persistedCover).catch(
+        () => {},
+      );
+    }
+    const effectiveCover = remoteCover || persistedCover?.uri;
+    const nextStore = effectiveCover
+      ? {
+          ...mappedStore,
+          hero: effectiveCover,
+          cover: effectiveCover,
+          coverPersistence: remoteCover ? "remote" : "local",
+        }
+      : mappedStore;
     setMyStore(nextStore);
     await refreshCatalog();
+    if (effectiveCover) {
+      setBusinesses((current) =>
+        current.map((business) =>
+          business.id === nextStore.id
+            ? { ...business, hero: effectiveCover, cover: effectiveCover }
+            : business,
+        ),
+      );
+    }
     return nextStore;
   };
 
@@ -934,6 +1006,11 @@ function mapApiStore(store) {
     policies: toStringArray(entity.policies, presentation.policies),
     isBackendEntity: true,
   };
+}
+
+function getApiStoreCover(store) {
+  const entity = store?.data || store;
+  return entity?.cover_url || entity?.cover || null;
 }
 
 function mapApiProduct(product, store) {

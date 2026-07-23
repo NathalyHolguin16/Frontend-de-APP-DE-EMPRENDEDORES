@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -27,6 +28,7 @@ import {
   SectionHeader,
 } from "../../components/MercattoUI";
 import { useMercatto } from "../../context/MercattoContext";
+import { validateStoreCover } from "../../../services/storeMedia";
 import { colors, radius, shadows, spacing, typography } from "../../theme/mercattoTheme";
 
 export function EntrepreneurDashboardScreen({ navigation }) {
@@ -542,6 +544,8 @@ export function SellerBusinessScreen({ navigation }) {
   });
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isPickingCover, setIsPickingCover] = useState(false);
+  const [coverAsset, setCoverAsset] = useState(null);
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   useEffect(() => {
     if (!myStore) return;
@@ -560,15 +564,64 @@ export function SellerBusinessScreen({ navigation }) {
     setIsSaving(true);
     setMessage("");
     try {
-      await saveStore(form);
-      setMessage("Información guardada correctamente.");
+      const updatedStore = await saveStore({ ...form, cover: coverAsset });
+      setCoverAsset(null);
+      setMessage(
+        coverAsset
+          ? updatedStore.coverPersistence === "local"
+            ? "Información guardada. La portada queda disponible en este dispositivo; el backend aún no admite imágenes de tiendas."
+            : "Información y portada guardadas correctamente."
+          : "Información guardada correctamente.",
+      );
     } catch (error) {
       setMessage(error?.message || "No pudimos guardar el negocio.");
     } finally {
       setIsSaving(false);
     }
   };
+  const chooseCover = async () => {
+    setIsPickingCover(true);
+    setMessage("");
+    try {
+      if (Platform.OS !== "web") {
+        const permission =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          setMessage(
+            "Permite el acceso a tus fotos para elegir una portada.",
+          );
+          return;
+        }
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+        base64: Platform.OS === "web",
+      });
+      if (result.canceled) return;
+
+      const asset = result.assets[0];
+      const validationMessage = validateStoreCover(asset);
+      if (validationMessage) {
+        setMessage(validationMessage);
+        return;
+      }
+      const previewUri =
+        Platform.OS === "web" && asset.base64
+          ? `data:${asset.mimeType || "image/jpeg"};base64,${asset.base64}`
+          : asset.uri;
+      setCoverAsset({ ...asset, previewUri });
+    } catch {
+      setMessage("No pudimos abrir la galería. Intenta nuevamente.");
+    } finally {
+      setIsPickingCover(false);
+    }
+  };
   const business = myStore;
+  const coverPreview = coverAsset?.previewUri || business?.cover;
   return (
     <Screen>
       <Text style={typography.h1}>Mi negocio</Text>
@@ -576,8 +629,8 @@ export function SellerBusinessScreen({ navigation }) {
         Mantén actualizada la información pública de tu emprendimiento.
       </Text>
       {business ? <Card>
-        {business.cover ? (
-          <Image source={{ uri: business.cover }} style={styles.coverPreview} resizeMode="cover" />
+        {coverPreview ? (
+          <Image source={{ uri: coverPreview }} style={styles.coverPreview} resizeMode="cover" />
         ) : (
           <View style={[styles.coverPreview, styles.coverPlaceholder]}>
             <Ionicons
@@ -587,6 +640,33 @@ export function SellerBusinessScreen({ navigation }) {
             />
           </View>
         )}
+        <View style={styles.coverButtons}>
+          <PrimaryButton
+            title={
+              isPickingCover
+                ? "Abriendo galería..."
+                : coverAsset
+                  ? "Cambiar selección"
+                  : "Elegir portada"
+            }
+            icon="image-outline"
+            variant="secondary"
+            disabled={isPickingCover || isSaving}
+            onPress={chooseCover}
+            style={{ flex: 1 }}
+          />
+          {coverAsset ? (
+            <IconButton
+              icon="close"
+              color={colors.red}
+              accessibilityLabel="Descartar portada seleccionada"
+              onPress={() => setCoverAsset(null)}
+            />
+          ) : null}
+        </View>
+        <Text style={typography.muted}>
+          Usa una imagen horizontal JPG, PNG o WebP de máximo 5 MB.
+        </Text>
         <View style={styles.businessInline}>
           <Avatar label={business.logo} size={64} />
           <View style={{ flex: 1 }}>
@@ -783,6 +863,11 @@ const styles = StyleSheet.create({
     height: 170,
     borderRadius: radius.lg,
     backgroundColor: colors.softOrange,
+  },
+  coverButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
   coverPlaceholder: {
     alignItems: "center",

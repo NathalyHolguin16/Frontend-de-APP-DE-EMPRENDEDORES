@@ -38,6 +38,7 @@ import {
   cityProvinces,
   matchMercattoCity,
 } from "../../data/mercattoData";
+import { storeCategories } from "../../data/catalogPresentation";
 import { useMercatto } from "../../context/MercattoContext";
 import { colors, radius, shadows, spacing, typography } from "../../theme/mercattoTheme";
 import { isEmail } from "../../utils/validation";
@@ -59,6 +60,14 @@ function getEditableProfileNames(user) {
   };
 }
 
+function isBusinessAvailableInCity(business, city) {
+  return (
+    !business.city ||
+    business.city === city ||
+    business.serviceCities?.includes(city)
+  );
+}
+
 export function BuyerHomeScreen({ navigation }) {
   const {
     businesses,
@@ -76,13 +85,22 @@ export function BuyerHomeScreen({ navigation }) {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("Todas");
   const cartCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+  const cityBusinesses = businesses.filter(
+    (business) => isBusinessAvailableInCity(business, selectedCity),
+  );
+  const cityCategories = new Set(
+    cityBusinesses.map((business) => business.category).filter(Boolean),
+  );
   const availableCategories = [
     "Todas",
-    ...new Set(businesses.map((business) => business.category).filter(Boolean)),
+    ...storeCategories.filter((category) => cityCategories.has(category)),
+    ...[...cityCategories].filter(
+      (category) => !storeCategories.includes(category),
+    ),
   ];
   const filteredBusinesses = businesses.filter(
     (business) =>
-      (!business.city || business.city === selectedCity) &&
+      isBusinessAvailableInCity(business, selectedCity) &&
       (activeCategory === "Todas" || business.category === activeCategory) &&
       `${business.name} ${business.category} ${business.shortDescription}`
         .toLowerCase()
@@ -864,7 +882,7 @@ export function PromosScreen({ navigation }) {
   } = useMercatto();
   const localBusinessIds = new Set(
     businesses
-      .filter((business) => !business.city || business.city === selectedCity)
+      .filter((business) => isBusinessAvailableInCity(business, selectedCity))
       .map((business) => business.id),
   );
   const promotions = products.filter(

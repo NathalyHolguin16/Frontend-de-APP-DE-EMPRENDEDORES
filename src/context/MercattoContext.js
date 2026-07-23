@@ -665,6 +665,11 @@ function mapApiStore(store) {
       "Emprendimientos",
     subcategory: presentation.subcategory || "Catálogo local",
     city: entity.city || presentation.city || null,
+    serviceCities: toStringArray(
+      entity.service_cities,
+      presentation.serviceCities ||
+        [entity.city || presentation.city].filter(Boolean),
+    ),
     address: entity.address || presentation.address || "",
     contact: entity.phone,
     phone: entity.phone,

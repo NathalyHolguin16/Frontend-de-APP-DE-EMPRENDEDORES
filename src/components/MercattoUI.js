@@ -388,7 +388,7 @@ export function BusinessCard({
       </View>
       <View style={styles.businessBody}>
         <View style={styles.businessTitleRow}>
-          <Avatar label={business.logo} />
+          <Avatar label={business.logo} image={business.logoImage} />
           <View style={{ flex: 1 }}>
             <Text style={styles.businessName}>{business.name}</Text>
             <Text style={styles.businessDesc} numberOfLines={2}>
@@ -511,7 +511,7 @@ export function PromoCard({ promo, businessName, onPress }) {
   );
 }
 
-export function Avatar({ label, size = 46 }) {
+export function Avatar({ label, size = 46, image }) {
   return (
     <View
       style={[
@@ -519,9 +519,17 @@ export function Avatar({ label, size = 46 }) {
         { width: size, height: size, borderRadius: size / 2 },
       ]}
     >
-      <Text style={[styles.avatarText, { fontSize: size * 0.34 }]}>
-        {label}
-      </Text>
+      {image ? (
+        <Image
+          source={{ uri: image }}
+          style={styles.avatarImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <Text style={[styles.avatarText, { fontSize: size * 0.34 }]}>
+          {label}
+        </Text>
+      )}
     </View>
   );
 }
@@ -945,6 +953,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  avatarImage: {
+    width: "100%",
+    height: "100%",
   },
   avatarText: {
     color: colors.primary,

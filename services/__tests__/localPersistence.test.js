@@ -5,11 +5,9 @@ import {
   loadStoredCart,
   loadStoredOrders,
   loadStoredSellerOrders,
-  loadStoredStoreCover,
   saveStoredCart,
   saveStoredOrders,
   saveStoredSellerOrders,
-  saveStoredStoreCover,
 } from "../localPersistence";
 
 describe("localPersistence", () => {
@@ -50,23 +48,5 @@ describe("localPersistence", () => {
     await expect(loadStoredSellerOrders(account)).resolves.toEqual(
       sellerOrders,
     );
-  });
-
-  it("stores a cover under its owner and business", async () => {
-    const luis = { id: "user-luis" };
-    const nathaly = { id: "user-nathaly" };
-    const cover = { uri: "file:///mercatto-store-covers/qa-luis.jpg" };
-
-    await saveStoredStoreCover(luis, "store-qa", cover);
-
-    await expect(loadStoredStoreCover(luis, "store-qa")).resolves.toEqual(
-      cover,
-    );
-    await expect(
-      loadStoredStoreCover(luis, "another-store"),
-    ).resolves.toBeNull();
-    await expect(
-      loadStoredStoreCover(nathaly, "store-qa"),
-    ).resolves.toBeNull();
   });
 });

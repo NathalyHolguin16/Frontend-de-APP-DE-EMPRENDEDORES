@@ -28,7 +28,7 @@ import {
   SectionHeader,
 } from "../../components/MercattoUI";
 import { useMercatto } from "../../context/MercattoContext";
-import { validateStoreCover } from "../../../services/storeMedia";
+import { validateStoreImage } from "../../../services/storeMedia";
 import { colors, radius, shadows, spacing, typography } from "../../theme/mercattoTheme";
 
 export function EntrepreneurDashboardScreen({ navigation }) {
@@ -86,7 +86,11 @@ export function EntrepreneurDashboardScreen({ navigation }) {
     <Screen>
       <Card style={styles.heroAdmin}>
         <View style={styles.heroTop}>
-          <Avatar label={myStore?.logo || "M"} size={68} />
+          <Avatar
+            label={myStore?.logo || "M"}
+            image={myStore?.logoImage}
+            size={68}
+          />
           <View style={{ flex: 1 }}>
             <Text style={[typography.h2, { color: colors.white }]}>
               {myStore?.name || "Mi emprendimiento"}
@@ -544,8 +548,9 @@ export function SellerBusinessScreen({ navigation }) {
   });
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [isPickingCover, setIsPickingCover] = useState(false);
-  const [coverAsset, setCoverAsset] = useState(null);
+  const [pickingImage, setPickingImage] = useState(null);
+  const [logoAsset, setLogoAsset] = useState(null);
+  const [bannerAsset, setBannerAsset] = useState(null);
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   useEffect(() => {
     if (!myStore) return;
@@ -564,13 +569,17 @@ export function SellerBusinessScreen({ navigation }) {
     setIsSaving(true);
     setMessage("");
     try {
-      const updatedStore = await saveStore({ ...form, cover: coverAsset });
-      setCoverAsset(null);
+      const hasNewImages = !!logoAsset || !!bannerAsset;
+      await saveStore({
+        ...form,
+        logo: logoAsset,
+        banner: bannerAsset,
+      });
+      setLogoAsset(null);
+      setBannerAsset(null);
       setMessage(
-        coverAsset
-          ? updatedStore.coverPersistence === "local"
-            ? "Información guardada. La portada queda disponible en este dispositivo; el backend aún no admite imágenes de tiendas."
-            : "Información y portada guardadas correctamente."
+        hasNewImages
+          ? "Información e imágenes guardadas correctamente."
           : "Información guardada correctamente.",
       );
     } catch (error) {
@@ -579,8 +588,8 @@ export function SellerBusinessScreen({ navigation }) {
       setIsSaving(false);
     }
   };
-  const chooseCover = async () => {
-    setIsPickingCover(true);
+  const chooseImage = async (kind) => {
+    setPickingImage(kind);
     setMessage("");
     try {
       if (Platform.OS !== "web") {
@@ -588,7 +597,7 @@ export function SellerBusinessScreen({ navigation }) {
           await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
           setMessage(
-            "Permite el acceso a tus fotos para elegir una portada.",
+            "Permite el acceso a tus fotos para elegir una imagen.",
           );
           return;
         }
@@ -597,14 +606,14 @@ export function SellerBusinessScreen({ navigation }) {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         allowsEditing: true,
-        aspect: [16, 9],
+        aspect: kind === "logo" ? [1, 1] : [16, 9],
         quality: 0.8,
         base64: Platform.OS === "web",
       });
       if (result.canceled) return;
 
       const asset = result.assets[0];
-      const validationMessage = validateStoreCover(asset);
+      const validationMessage = validateStoreImage(asset);
       if (validationMessage) {
         setMessage(validationMessage);
         return;
@@ -613,15 +622,21 @@ export function SellerBusinessScreen({ navigation }) {
         Platform.OS === "web" && asset.base64
           ? `data:${asset.mimeType || "image/jpeg"};base64,${asset.base64}`
           : asset.uri;
-      setCoverAsset({ ...asset, previewUri });
+      const nextAsset = { ...asset, previewUri };
+      if (kind === "logo") {
+        setLogoAsset(nextAsset);
+      } else {
+        setBannerAsset(nextAsset);
+      }
     } catch {
       setMessage("No pudimos abrir la galería. Intenta nuevamente.");
     } finally {
-      setIsPickingCover(false);
+      setPickingImage(null);
     }
   };
   const business = myStore;
-  const coverPreview = coverAsset?.previewUri || business?.cover;
+  const logoPreview = logoAsset?.previewUri || business?.logoImage;
+  const bannerPreview = bannerAsset?.previewUri || business?.cover;
   return (
     <Screen>
       <Text style={typography.h1}>Mi negocio</Text>
@@ -629,8 +644,9 @@ export function SellerBusinessScreen({ navigation }) {
         Mantén actualizada la información pública de tu emprendimiento.
       </Text>
       {business ? <Card>
-        {coverPreview ? (
-          <Image source={{ uri: coverPreview }} style={styles.coverPreview} resizeMode="cover" />
+        <Text style={typography.h3}>Portada del negocio</Text>
+        {bannerPreview ? (
+          <Image source={{ uri: bannerPreview }} style={styles.coverPreview} resizeMode="cover" />
         ) : (
           <View style={[styles.coverPreview, styles.coverPlaceholder]}>
             <Ionicons
@@ -643,36 +659,67 @@ export function SellerBusinessScreen({ navigation }) {
         <View style={styles.coverButtons}>
           <PrimaryButton
             title={
-              isPickingCover
+              pickingImage === "banner"
                 ? "Abriendo galería..."
-                : coverAsset
+                : bannerAsset
                   ? "Cambiar selección"
                   : "Elegir portada"
             }
             icon="image-outline"
             variant="secondary"
-            disabled={isPickingCover || isSaving}
-            onPress={chooseCover}
+            disabled={!!pickingImage || isSaving}
+            onPress={() => chooseImage("banner")}
             style={{ flex: 1 }}
           />
-          {coverAsset ? (
+          {bannerAsset ? (
             <IconButton
               icon="close"
               color={colors.red}
               accessibilityLabel="Descartar portada seleccionada"
-              onPress={() => setCoverAsset(null)}
+              onPress={() => setBannerAsset(null)}
             />
           ) : null}
         </View>
         <Text style={typography.muted}>
           Usa una imagen horizontal JPG, PNG o WebP de máximo 5 MB.
         </Text>
+        <Text style={typography.h3}>Logo del negocio</Text>
         <View style={styles.businessInline}>
-          <Avatar label={business.logo} size={64} />
+          <Avatar
+            label={business.logo}
+            image={logoPreview}
+            size={72}
+          />
           <View style={{ flex: 1 }}>
             <Text style={typography.h3}>{business.name}</Text>
-            <Text style={typography.muted}>Tienda sincronizada con Mercatto.</Text>
+            <Text style={typography.muted}>
+              Imagen cuadrada JPG, PNG o WebP de máximo 5 MB.
+            </Text>
           </View>
+        </View>
+        <View style={styles.coverButtons}>
+          <PrimaryButton
+            title={
+              pickingImage === "logo"
+                ? "Abriendo galería..."
+                : logoAsset
+                  ? "Cambiar selección"
+                  : "Elegir logo"
+            }
+            icon="camera-outline"
+            variant="secondary"
+            disabled={!!pickingImage || isSaving}
+            onPress={() => chooseImage("logo")}
+            style={{ flex: 1 }}
+          />
+          {logoAsset ? (
+            <IconButton
+              icon="close"
+              color={colors.red}
+              accessibilityLabel="Descartar logo seleccionado"
+              onPress={() => setLogoAsset(null)}
+            />
+          ) : null}
         </View>
       </Card> : null}
       <Card>

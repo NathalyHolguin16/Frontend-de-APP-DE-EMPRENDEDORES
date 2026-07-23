@@ -3,7 +3,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const cartKeyPrefix = "mercatto_cart_v1";
 const ordersKeyPrefix = "mercatto_orders_v1";
 const sellerOrdersKeyPrefix = "mercatto_seller_orders_v1";
-const storeCoverKeyPrefix = "mercatto_store_cover_v1";
 
 export function getAccountStorageId(account) {
   return String(account?.id || account?.email || "")
@@ -14,14 +13,6 @@ export function getAccountStorageId(account) {
 function accountKey(prefix, account) {
   const accountId = getAccountStorageId(account);
   return accountId ? `${prefix}:${accountId}` : null;
-}
-
-function storeKey(prefix, account, storeId) {
-  const baseKey = accountKey(prefix, account);
-  const normalizedStoreId = String(storeId || "").trim().toLowerCase();
-  return baseKey && normalizedStoreId
-    ? `${baseKey}:${normalizedStoreId}`
-    : null;
 }
 
 async function readJson(key, fallback) {
@@ -61,12 +52,4 @@ export function loadStoredSellerOrders(account) {
 
 export function saveStoredSellerOrders(account, orders) {
   return writeJson(accountKey(sellerOrdersKeyPrefix, account), orders);
-}
-
-export function loadStoredStoreCover(account, storeId) {
-  return readJson(storeKey(storeCoverKeyPrefix, account, storeId), null);
-}
-
-export function saveStoredStoreCover(account, storeId, cover) {
-  return writeJson(storeKey(storeCoverKeyPrefix, account, storeId), cover);
 }

@@ -431,7 +431,11 @@ export function BusinessDetailScreen({ route, navigation }) {
       </View>
       <Card style={styles.profileCard}>
         <View style={styles.businessTitleRow}>
-          <Avatar label={business.logo} size={62} />
+          <Avatar
+            label={business.logo}
+            image={business.logoImage}
+            size={62}
+          />
           <View style={{ flex: 1 }}>
             <Text style={typography.h2}>{business.name}</Text>
             <Text style={typography.muted}>{business.category} · {business.subcategory}</Text>

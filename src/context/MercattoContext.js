@@ -42,16 +42,11 @@ import {
   loadStoredCart,
   loadStoredOrders,
   loadStoredSellerOrders,
-  loadStoredStoreCover,
   saveStoredCart,
   saveStoredOrders,
   saveStoredSellerOrders,
-  saveStoredStoreCover,
 } from "../../services/localPersistence";
-import {
-  createStoreFormData,
-  persistStoreCover,
-} from "../../services/storeMedia";
+import { createStoreFormData } from "../../services/storeMedia";
 
 const MercattoContext = createContext(null);
 
@@ -161,23 +156,6 @@ export function MercattoProvider({ children }) {
     );
   }, [businesses, products]);
 
-  useEffect(() => {
-    if (
-      !myStore?.id ||
-      !myStore?.cover ||
-      myStore.coverPersistence !== "local"
-    ) {
-      return;
-    }
-    setBusinesses((current) =>
-      current.map((business) =>
-        business.id === myStore.id
-          ? { ...business, hero: myStore.cover, cover: myStore.cover }
-          : business,
-      ),
-    );
-  }, [myStore]);
-
   const syncBuyerOrderRecords = async (sourceOrders, token) => {
     const results = await Promise.allSettled(
       sourceOrders.map((order) =>
@@ -252,30 +230,18 @@ export function MercattoProvider({ children }) {
       ...mapApiAddress(defaultAddress),
     });
     const mappedStore = apiStore ? mapApiStore(apiStore) : null;
-    const [storedCart, storedOrders, storedSellerOrders, storedStoreCover] = await Promise.all([
+    const [storedCart, storedOrders, storedSellerOrders] = await Promise.all([
       loadStoredCart(nextUser),
       loadStoredOrders(nextUser),
       loadStoredSellerOrders(nextUser),
-      mappedStore?.id
-        ? loadStoredStoreCover(nextUser, mappedStore.id)
-        : Promise.resolve(null),
     ]);
-    const hydratedStore =
-      mappedStore && storedStoreCover?.uri && !getApiStoreCover(apiStore)
-        ? {
-            ...mappedStore,
-            hero: storedStoreCover.uri,
-            cover: storedStoreCover.uri,
-            coverPersistence: "local",
-          }
-        : mappedStore;
     const mappedBuyerOrders = await syncBuyerOrderRecords(
       storedOrders,
       response.token,
     );
     const remoteSellerOrders = apiSellerOrders.map((order) =>
       mapApiOrder(order, {
-        store: hydratedStore,
+        store: mappedStore,
         catalogProducts: products,
         catalogBusinesses: businesses,
       }),
@@ -288,7 +254,7 @@ export function MercattoProvider({ children }) {
     setCart(normalizeStoredCart(storedCart));
     setUser(nextUser);
     setSavedAddresses(addresses);
-    setMyStore(hydratedStore);
+    setMyStore(mappedStore);
     setOrders(mappedBuyerOrders);
     setSellerOrders(mappedSellerOrders);
     setIsOrdersLoading(false);
@@ -728,49 +694,20 @@ export function MercattoProvider({ children }) {
       phone: payload.phone.trim(),
       slug: createSlug(payload.slug || payload.name),
     };
-    const hasNewCover = !!payload.cover?.uri;
-    const requestPayload = hasNewCover
-      ? createStoreFormData(fields, payload.cover, !!myStore?.id)
+    const images = {
+      logo: payload.logo,
+      banner: payload.banner,
+    };
+    const hasNewImages = Object.values(images).some((asset) => asset?.uri);
+    const requestPayload = hasNewImages
+      ? createStoreFormData(fields, images, !!myStore?.id)
       : fields;
     const response = myStore?.id
       ? await updateStoreRequest(myStore.id, requestPayload)
       : await createStoreRequest(requestPayload);
-    const mappedStore = mapApiStore(response);
-    const remoteCover = getApiStoreCover(response);
-    const persistedCover = hasNewCover
-      ? await persistStoreCover(payload.cover, mappedStore.id)
-      : myStore?.coverPersistence === "local"
-        ? {
-            uri: myStore.cover,
-            fileName: "portada.jpg",
-            mimeType: "image/jpeg",
-          }
-        : null;
-    if (persistedCover?.uri && user) {
-      await saveStoredStoreCover(user, mappedStore.id, persistedCover).catch(
-        () => {},
-      );
-    }
-    const effectiveCover = remoteCover || persistedCover?.uri;
-    const nextStore = effectiveCover
-      ? {
-          ...mappedStore,
-          hero: effectiveCover,
-          cover: effectiveCover,
-          coverPersistence: remoteCover ? "remote" : "local",
-        }
-      : mappedStore;
+    const nextStore = mapApiStore(response);
     setMyStore(nextStore);
     await refreshCatalog();
-    if (effectiveCover) {
-      setBusinesses((current) =>
-        current.map((business) =>
-          business.id === nextStore.id
-            ? { ...business, hero: effectiveCover, cover: effectiveCover }
-            : business,
-        ),
-      );
-    }
     return nextStore;
   };
 
@@ -946,10 +883,20 @@ const orderStatusToApi = {
 function mapApiStore(store) {
   const entity = store?.data || store;
   const presentation = getStorePresentation(entity);
+  const logoImage = entity.logo_url || entity.logo || null;
+  const banner =
+    entity.banner_url ||
+    entity.banner ||
+    entity.cover_url ||
+    entity.cover ||
+    presentation.hero ||
+    logoImage ||
+    null;
   return {
     id: entity.id,
     name: entity.name,
     logo: getInitials(entity.name),
+    logoImage,
     slug: entity.slug,
     shortDescription: entity.description || "Emprendimiento local en Mercatto.",
     about: entity.description || "Conoce los productos de este emprendimiento local.",
@@ -969,8 +916,8 @@ function mapApiStore(store) {
     contact: entity.phone,
     phone: entity.phone,
     owner: entity.owner,
-    hero: entity.cover_url || entity.cover || presentation.hero || null,
-    cover: entity.cover_url || entity.cover || presentation.hero || null,
+    hero: banner,
+    cover: banner,
     rating: Number(entity.rating || presentation.rating || 0),
     reviews: Number(entity.reviews_count || presentation.reviews || 0),
     deliveryTime:
@@ -1006,11 +953,6 @@ function mapApiStore(store) {
     policies: toStringArray(entity.policies, presentation.policies),
     isBackendEntity: true,
   };
-}
-
-function getApiStoreCover(store) {
-  const entity = store?.data || store;
-  return entity?.cover_url || entity?.cover || null;
 }
 
 function mapApiProduct(product, store) {

@@ -1,6 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import {
   Avatar,
@@ -154,33 +164,133 @@ export function EntrepreneurDashboardScreen({ navigation }) {
 }
 
 export function SellerOrdersScreen() {
-  const { sellerOrders, updateSellerOrder } = useMercatto();
+  const {
+    sellerOrders,
+    updateSellerOrder,
+    refreshSellerOrders,
+    isSellerOrdersLoading,
+    sellerOrdersError,
+  } = useMercatto();
   const [updatingOrderId, setUpdatingOrderId] = useState(null);
-  const [message, setMessage] = useState("");
-  const statuses = ["Nuevo", "Confirmado", "En preparación", "Listo para retirar", "Enviado", "Entregado", "Cancelado"];
+  const [activeStatus, setActiveStatus] = useState("Todos");
+  const [message, setMessage] = useState(null);
+  const statuses = [
+    "Todos",
+    "Nuevo",
+    "En preparación",
+    "Enviado",
+    "Entregado",
+    "Cancelado",
+  ];
+  const filteredOrders =
+    activeStatus === "Todos"
+      ? sellerOrders
+      : sellerOrders.filter((order) => order.status === activeStatus);
+
   const changeStatus = async (orderId, status) => {
     setUpdatingOrderId(orderId);
-    setMessage("");
+    setMessage(null);
     try {
       await updateSellerOrder(orderId, status);
+      setMessage({
+        tone: "success",
+        text: `Pedido actualizado a "${status}".`,
+      });
     } catch (error) {
-      setMessage(error?.message || "No pudimos actualizar el pedido.");
+      setMessage({
+        tone: "error",
+        text: error?.message || "No pudimos actualizar el pedido.",
+      });
     } finally {
       setUpdatingOrderId(null);
     }
   };
+
+  const contactBuyer = async (phone) => {
+    const normalizedPhone = String(phone || "").replace(/[^\d+]/g, "");
+    if (!normalizedPhone) {
+      Alert.alert("Contacto no disponible", "Este pedido no tiene un teléfono registrado.");
+      return;
+    }
+
+    try {
+      await Linking.openURL(`tel:${normalizedPhone}`);
+    } catch {
+      Alert.alert("No pudimos abrir el teléfono", `Comunícate al ${phone}.`);
+    }
+  };
+
   return (
     <Screen>
-      <Text style={typography.h1}>Pedidos del negocio</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>
-        {statuses.map((status) => <Chip key={status} label={status} />)}
+      <View style={styles.ordersHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={typography.h1}>Pedidos del negocio</Text>
+          <Text style={typography.muted}>
+            Confirma, prepara y completa cada venta.
+          </Text>
+        </View>
+        <IconButton
+          icon="refresh-outline"
+          accessibilityLabel="Actualizar pedidos del negocio"
+          disabled={isSellerOrdersLoading}
+          onPress={() => refreshSellerOrders().catch(() => {})}
+        />
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.horizontal}
+      >
+        {statuses.map((status) => {
+          const count =
+            status === "Todos"
+              ? sellerOrders.length
+              : sellerOrders.filter((order) => order.status === status).length;
+          return (
+            <Chip
+              key={status}
+              label={`${status} (${count})`}
+              selected={activeStatus === status}
+              onPress={() => setActiveStatus(status)}
+            />
+          );
+        })}
       </ScrollView>
-      {message ? <Text selectable style={styles.warning}>{message}</Text> : null}
-      {sellerOrders.map((order) => (
+
+      {message ? (
+        <Text
+          selectable
+          style={message.tone === "success" ? styles.success : styles.warning}
+        >
+          {message.text}
+        </Text>
+      ) : null}
+
+      {isSellerOrdersLoading && !sellerOrders.length ? (
+        <Card style={styles.loadingCard}>
+          <ActivityIndicator color={colors.primaryDark} size="large" />
+          <Text style={typography.muted}>Actualizando pedidos...</Text>
+        </Card>
+      ) : null}
+
+      {sellerOrdersError ? (
+        <EmptyState
+          icon="cloud-offline-outline"
+          title="No pudimos cargar los pedidos"
+          message={sellerOrdersError}
+          action="Intentar nuevamente"
+          onPress={() => refreshSellerOrders().catch(() => {})}
+        />
+      ) : null}
+
+      {!sellerOrdersError && filteredOrders.map((order) => (
         <Card key={order.id}>
           <View style={styles.headerLine}>
-            <View>
-              <Text style={typography.h3}>{order.id}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={typography.h3}>
+                Pedido #{String(order.id || "").slice(0, 8).toUpperCase()}
+              </Text>
               <Text style={typography.muted}>{order.buyer} · {order.time}</Text>
             </View>
             <Chip label={order.status} tone={order.status === "Nuevo" ? colors.softOrange : "#E9F7EF"} />
@@ -193,15 +303,15 @@ export function SellerOrdersScreen() {
           <View style={styles.actionWrap}>
             {order.status === "Nuevo" ? (
               <>
-                <PrimaryButton title="Aceptar" disabled={updatingOrderId === order.id} onPress={() => changeStatus(order.id, "Confirmado")} style={{ flex: 1 }} />
+                <PrimaryButton title="Aceptar" disabled={updatingOrderId === order.id} onPress={() => changeStatus(order.id, "En preparación")} style={{ flex: 1 }} />
                 <PrimaryButton title="Rechazar" disabled={updatingOrderId === order.id} variant="secondary" onPress={() => changeStatus(order.id, "Cancelado")} style={{ flex: 1 }} />
               </>
-            ) : (
+            ) : !["Entregado", "Cancelado"].includes(order.status) ? (
               <>
-                <PrimaryButton title="Cambiar estado" disabled={updatingOrderId === order.id} onPress={() => changeStatus(order.id, nextStatus(order.status))} style={{ flex: 1 }} />
-                <PrimaryButton title="Contactar" variant="secondary" onPress={() => Alert.alert("Contacto", `Llamando a ${order.phone}`)} style={{ flex: 1 }} />
+                <PrimaryButton title={`Marcar como ${nextStatus(order.status).toLowerCase()}`} disabled={updatingOrderId === order.id} onPress={() => changeStatus(order.id, nextStatus(order.status))} style={{ flex: 1 }} />
               </>
-            )}
+            ) : null}
+            <PrimaryButton title="Contactar" variant="secondary" onPress={() => contactBuyer(order.phone)} style={{ flex: 1 }} />
           </View>
           <PrimaryButton
             title="Ver dirección"
@@ -215,11 +325,16 @@ export function SellerOrdersScreen() {
           />
         </Card>
       ))}
-      {!sellerOrders.length ? (
+
+      {!isSellerOrdersLoading && !sellerOrdersError && !filteredOrders.length ? (
         <EmptyState
           icon="receipt-outline"
-          title="Sin pedidos"
-          message="Los pedidos creados para tu tienda aparecerán aquí."
+          title={activeStatus === "Todos" ? "Sin pedidos" : `Sin pedidos ${activeStatus.toLowerCase()}`}
+          message={
+            activeStatus === "Todos"
+              ? "Los pedidos creados para tu tienda aparecerán aquí."
+              : "No hay pedidos con este estado."
+          }
         />
       ) : null}
     </Screen>
@@ -498,9 +613,9 @@ function InfoLine({ label, value }) {
 }
 
 function nextStatus(status) {
-  const flow = ["Nuevo", "Confirmado", "En preparación", "Listo para retirar", "Enviado", "Entregado"];
+  const flow = ["Nuevo", "En preparación", "Enviado", "Entregado"];
   const index = flow.indexOf(status);
-  return flow[Math.min(index + 1, flow.length - 1)] || "Confirmado";
+  return flow[Math.min(index + 1, flow.length - 1)] || "En preparación";
 }
 
 function goToLogin(navigation) {
@@ -575,6 +690,18 @@ const styles = StyleSheet.create({
   },
   horizontal: {
     gap: spacing.sm,
+  },
+  ordersHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  loadingCard: {
+    alignItems: "center",
+  },
+  success: {
+    color: "#22864B",
+    fontWeight: "850",
   },
   headerLine: {
     flexDirection: "row",

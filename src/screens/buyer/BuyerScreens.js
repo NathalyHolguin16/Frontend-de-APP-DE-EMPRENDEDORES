@@ -951,34 +951,119 @@ export function PromosScreen({ navigation }) {
 }
 
 export function BuyerOrdersScreen({ navigation }) {
-  const { orders } = useMercatto();
+  const {
+    orders,
+    isOrdersLoading,
+    ordersError,
+    refreshBuyerOrders,
+  } = useMercatto();
+  const [activeGroup, setActiveGroup] = useState("En curso");
   const groups = {
     "En curso": orders.filter((order) => !["Entregado", "Cancelado"].includes(order.status)),
     Completados: orders.filter((order) => order.status === "Entregado"),
     Cancelados: orders.filter((order) => order.status === "Cancelado"),
   };
+  const visibleOrders = groups[activeGroup];
+
   return (
     <Screen>
-      <Text style={typography.h1}>Pedidos</Text>
-      {Object.entries(groups).map(([title, list]) => (
-        <View key={title} style={{ gap: spacing.md }}>
-          <SectionHeader title={title} />
-          {list.length ? list.map((order) => <BuyerOrderCard key={order.id} order={order} navigation={navigation} />) : <EmptyState title={`Sin pedidos ${title.toLowerCase()}`} message="Cuando tengas movimientos aparecerán aquí." />}
+      <View style={styles.ordersHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={typography.h1}>Pedidos</Text>
+          <Text style={typography.muted}>
+            Consulta el avance de tus compras.
+          </Text>
         </View>
-      ))}
+        <IconButton
+          icon="refresh-outline"
+          accessibilityLabel="Actualizar pedidos"
+          disabled={isOrdersLoading}
+          onPress={() => refreshBuyerOrders().catch(() => {})}
+        />
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.horizontal}
+      >
+        {Object.entries(groups).map(([group, groupOrders]) => (
+          <Chip
+            key={group}
+            label={`${group} (${groupOrders.length})`}
+            selected={activeGroup === group}
+            onPress={() => setActiveGroup(group)}
+          />
+        ))}
+      </ScrollView>
+
+      {isOrdersLoading && !orders.length ? (
+        <Card style={styles.loadingCard}>
+          <ActivityIndicator color={colors.primaryDark} size="large" />
+          <Text style={typography.muted}>Actualizando tus pedidos...</Text>
+        </Card>
+      ) : null}
+
+      {ordersError ? (
+        <EmptyState
+          icon="cloud-offline-outline"
+          title="No pudimos actualizar tus pedidos"
+          message={ordersError}
+          action="Intentar nuevamente"
+          onPress={() => refreshBuyerOrders().catch(() => {})}
+        />
+      ) : null}
+
+      {!isOrdersLoading && !ordersError && visibleOrders.length ? (
+        visibleOrders.map((order) => (
+          <BuyerOrderCard
+            key={order.id}
+            order={order}
+            navigation={navigation}
+          />
+        ))
+      ) : null}
+
+      {!isOrdersLoading && !ordersError && !visibleOrders.length ? (
+        <EmptyState
+          icon="receipt-outline"
+          title={`Sin pedidos ${activeGroup.toLowerCase()}`}
+          message={
+            activeGroup === "En curso"
+              ? "Tus próximos pedidos aparecerán aquí."
+              : "Cuando tengas movimientos aparecerán aquí."
+          }
+          action={activeGroup === "En curso" ? "Explorar tiendas" : undefined}
+          onPress={
+            activeGroup === "En curso"
+              ? () => navigation.navigate("Inicio")
+              : undefined
+          }
+        />
+      ) : null}
     </Screen>
   );
 }
 
 function BuyerOrderCard({ order, navigation }) {
+  const shortId = String(order.id || "")
+    .slice(0, 8)
+    .toUpperCase();
+  const statusTone =
+    order.status === "Cancelado"
+      ? "#FCEDEA"
+      : order.status === "Entregado"
+        ? "#E9F7EF"
+        : colors.softOrange;
+
   return (
     <Card>
       <View style={styles.headerLine}>
-        <View>
-          <Text style={typography.h3}>{order.id}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={typography.h3}>Pedido #{shortId}</Text>
           <Text style={typography.muted}>{order.businessName} · {order.date}</Text>
         </View>
-        <Chip label={order.status} tone={order.status === "Cancelado" ? "#FCEDEA" : colors.softOrange} />
+        <Chip label={order.status} tone={statusTone} />
       </View>
       <Text style={typography.muted}>{order.items.join(", ")}</Text>
       <InfoLine label="Total" value={`$${order.total.toFixed(2)}`} />
@@ -1893,6 +1978,11 @@ const styles = StyleSheet.create({
   horizontal: {
     gap: spacing.md,
     paddingRight: spacing.md,
+  },
+  ordersHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
   },
   banner: {
     width: 280,

@@ -335,6 +335,10 @@ export async function getMyOrders(page = 1, token) {
   return request(`/api/my-orders?page=${page}`, { token });
 }
 
+export async function getStoreOrders(storeId, page = 1, token) {
+  return request(`/api/stores/${storeId}/orders?page=${page}`, { token });
+}
+
 export async function updateOrderStatus(storeId, orderId, status, token) {
   return request(`/api/stores/${storeId}/orders/${orderId}`, {
     method: "PATCH",

@@ -24,6 +24,7 @@ import {
   getMyOrders,
   getMyStore,
   getStoreProducts,
+  getStoreOrders,
   getStores,
   loginUser,
   logoutUser,
@@ -35,6 +36,13 @@ import {
   updateProduct as updateProductRequest,
   updateStore as updateStoreRequest,
 } from "../../services/mercattoApi";
+import {
+  getAccountStorageId,
+  loadStoredCart,
+  loadStoredOrders,
+  saveStoredCart,
+  saveStoredOrders,
+} from "../../services/localPersistence";
 
 const MercattoContext = createContext(null);
 
@@ -50,18 +58,17 @@ export function MercattoProvider({ children }) {
   const [isCatalogLoading, setIsCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
   const [favorites, setFavorites] = useState(["dulce-orilla"]);
-  const [cart, setCart] = useState({
-    businessId: null,
-    items: [],
-    deliveryMode: "Delivery",
-    paymentMethod: "Efectivo",
-    coupon: "",
-  });
+  const [cart, setCart] = useState(createEmptyCart);
   const [orders, setOrders] = useState([]);
   const [sellerOrders, setSellerOrders] = useState([]);
+  const [isOrdersLoading, setIsOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState("");
+  const [isSellerOrdersLoading, setIsSellerOrdersLoading] = useState(false);
+  const [sellerOrdersError, setSellerOrdersError] = useState("");
   const [notice, setNotice] = useState(null);
   const noticeTimerRef = useRef(null);
   const lastCartAddRef = useRef({ productId: null, timestamp: 0 });
+  const cartOwnerRef = useRef(null);
 
   const showNotice = (message, tone = "success") => {
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
@@ -115,21 +122,66 @@ export function MercattoProvider({ children }) {
     [],
   );
 
+  useEffect(() => {
+    const ownerId = getAccountStorageId(user);
+    if (!ownerId || cartOwnerRef.current !== ownerId) return;
+    saveStoredCart(user, cart).catch(() => {});
+  }, [cart, user]);
+
+  useEffect(() => {
+    if (!getAccountStorageId(user)) return;
+    saveStoredOrders(user, orders).catch(() => {});
+  }, [orders, user]);
+
+  useEffect(() => {
+    if (!products.length || !businesses.length) return;
+    setOrders((current) =>
+      current.map((order) =>
+        enrichOrderWithCatalog(order, products, businesses),
+      ),
+    );
+    setSellerOrders((current) =>
+      current.map((order) =>
+        enrichOrderWithCatalog(order, products, businesses),
+      ),
+    );
+  }, [businesses, products]);
+
   const login = async ({ identifier, password }) => {
     const response = await loginUser({
       email: identifier.trim().toLowerCase(),
       password,
     });
     await saveToken(response.token);
+    setIsOrdersLoading(true);
+    setIsSellerOrdersLoading(true);
+    setOrdersError("");
+    setSellerOrdersError("");
 
-    const [addressResult, storeResult, orderResult] = await Promise.allSettled([
-      getAddresses(response.token),
-      getMyStore(response.token),
-      getMyOrders(1, response.token),
-    ]);
-    const addresses = addressResult.status === "fulfilled" ? addressResult.value?.data || [] : [];
+    const [addressResult, storeResult, buyerOrderResult] =
+      await Promise.allSettled([
+        getAddresses(response.token),
+        getMyStore(response.token),
+        getAllPages((page) => getMyOrders(page, response.token)),
+      ]);
+    const addresses =
+      addressResult.status === "fulfilled"
+        ? addressResult.value?.data || []
+        : [];
     const apiStore = storeResult.status === "fulfilled" ? storeResult.value : null;
-    const apiOrders = orderResult.status === "fulfilled" ? orderResult.value?.data || [] : [];
+    const apiStoreEntity = apiStore?.data || apiStore;
+    let apiSellerOrders = [];
+    if (apiStoreEntity?.id) {
+      try {
+        apiSellerOrders = await getAllPages((page) =>
+          getStoreOrders(apiStoreEntity.id, page, response.token),
+        );
+      } catch (error) {
+        setSellerOrdersError(
+          error?.message || "No pudimos actualizar los pedidos del negocio.",
+        );
+      }
+    }
 
     const defaultAddress = getDefaultAddress(addresses);
     const cachedProfile = await getCachedProfile();
@@ -140,10 +192,46 @@ export function MercattoProvider({ children }) {
       profiles: apiStore ? ["buyer", "entrepreneur"] : ["buyer"],
       ...mapApiAddress(defaultAddress),
     });
+    const [storedCart, storedOrders] = await Promise.all([
+      loadStoredCart(nextUser),
+      loadStoredOrders(nextUser),
+    ]);
+    const mappedStore = apiStore ? mapApiStore(apiStore) : null;
+    const mappedBuyerOrders =
+      buyerOrderResult.status === "fulfilled"
+        ? buyerOrderResult.value.map((order) =>
+            mapApiOrder(order, {
+              catalogProducts: products,
+              catalogBusinesses: businesses,
+            }),
+          )
+        : storedOrders;
+    if (buyerOrderResult.status === "rejected") {
+      setOrdersError(
+        storedOrders.length
+          ? "No pudimos actualizar tus pedidos. Mostramos el último respaldo guardado."
+          : buyerOrderResult.reason?.message ||
+              "No pudimos cargar tus pedidos.",
+      );
+    }
+
+    cartOwnerRef.current = getAccountStorageId(nextUser);
+    setCart(normalizeStoredCart(storedCart));
     setUser(nextUser);
     setSavedAddresses(addresses);
-    setMyStore(apiStore ? mapApiStore(apiStore) : null);
-    setSellerOrders(apiOrders.map(mapApiOrder));
+    setMyStore(mappedStore);
+    setOrders(mappedBuyerOrders);
+    setSellerOrders(
+      apiSellerOrders.map((order) =>
+        mapApiOrder(order, {
+          store: mappedStore,
+          catalogProducts: products,
+          catalogBusinesses: businesses,
+        }),
+      ),
+    );
+    setIsOrdersLoading(false);
+    setIsSellerOrdersLoading(false);
     if (nextUser.city) {
       setSelectedCity(nextUser.city);
     }
@@ -199,7 +287,12 @@ export function MercattoProvider({ children }) {
     setDeliveryAddress(nextUser.address || "");
     setSavedAddresses([]);
     setMyStore(apiStore ? mapApiStore(apiStore) : null);
+    setOrders([]);
     setSellerOrders([]);
+    setOrdersError("");
+    setSellerOrdersError("");
+    cartOwnerRef.current = getAccountStorageId(nextUser);
+    setCart(createEmptyCart());
     setMode(profileType === "entrepreneur" ? "entrepreneur" : "buyer");
     await saveCachedProfile({ ownerEmail: nextUser.email, profile: nextUser });
     if (apiStore) await refreshCatalog();
@@ -312,13 +405,22 @@ export function MercattoProvider({ children }) {
   };
 
   const logout = async () => {
+    if (user) {
+      await Promise.allSettled([
+        saveStoredCart(user, cart),
+        saveStoredOrders(user, orders),
+      ]);
+    }
+    cartOwnerRef.current = null;
     setUser(null);
     setSavedAddresses([]);
     setMyStore(null);
     setOrders([]);
     setSellerOrders([]);
+    setOrdersError("");
+    setSellerOrdersError("");
     setMode("buyer");
-    setCart({ businessId: null, items: [], deliveryMode: "Delivery", paymentMethod: "Efectivo", coupon: "" });
+    setCart(createEmptyCart());
     try {
       await logoutUser();
     } catch {
@@ -419,7 +521,59 @@ export function MercattoProvider({ children }) {
   };
 
   const clearCart = () => {
-    setCart({ businessId: null, items: [], deliveryMode: "Delivery", paymentMethod: "Efectivo", coupon: "" });
+    setCart(createEmptyCart());
+  };
+
+  const refreshBuyerOrders = async ({ silent = false } = {}) => {
+    if (!silent) setIsOrdersLoading(true);
+    setOrdersError("");
+    try {
+      const apiOrders = await getAllPages((page) => getMyOrders(page));
+      const nextOrders = apiOrders.map((order) =>
+        mapApiOrder(order, {
+          catalogProducts: products,
+          catalogBusinesses: businesses,
+        }),
+      );
+      setOrders(nextOrders);
+      if (user) await saveStoredOrders(user, nextOrders);
+      return nextOrders;
+    } catch (error) {
+      setOrdersError(error?.message || "No pudimos actualizar tus pedidos.");
+      throw error;
+    } finally {
+      if (!silent) setIsOrdersLoading(false);
+    }
+  };
+
+  const refreshSellerOrders = async ({ silent = false } = {}) => {
+    if (!myStore?.id) {
+      setSellerOrders([]);
+      return [];
+    }
+    if (!silent) setIsSellerOrdersLoading(true);
+    setSellerOrdersError("");
+    try {
+      const apiOrders = await getAllPages((page) =>
+        getStoreOrders(myStore.id, page),
+      );
+      const nextOrders = apiOrders.map((order) =>
+        mapApiOrder(order, {
+          store: myStore,
+          catalogProducts: products,
+          catalogBusinesses: businesses,
+        }),
+      );
+      setSellerOrders(nextOrders);
+      return nextOrders;
+    } catch (error) {
+      setSellerOrdersError(
+        error?.message || "No pudimos actualizar los pedidos del negocio.",
+      );
+      throw error;
+    } finally {
+      if (!silent) setIsSellerOrdersLoading(false);
+    }
   };
 
   const confirmOrder = async ({ customerPhone }) => {
@@ -448,8 +602,11 @@ export function MercattoProvider({ children }) {
       })),
     });
     const nextOrder = mapApiOrder(response, {
+      store: business,
       deliveryMode: cart.deliveryMode,
       paymentMethod: cart.paymentMethod,
+      catalogProducts: products,
+      catalogBusinesses: businesses,
     });
     setOrders((current) => [nextOrder, ...current]);
     clearCart();
@@ -461,8 +618,15 @@ export function MercattoProvider({ children }) {
     if (!myStore?.id) throw new Error("Primero debes registrar tu tienda.");
     const apiStatus = orderStatusToApi[status] || status;
     const response = await updateOrderStatus(myStore.id, orderId, apiStatus);
-    const nextOrder = mapApiOrder(response);
+    const nextOrder = mapApiOrder(response, {
+      store: myStore,
+      catalogProducts: products,
+      catalogBusinesses: businesses,
+    });
     setSellerOrders((current) =>
+      current.map((order) => (order.id === orderId ? nextOrder : order)),
+    );
+    setOrders((current) =>
       current.map((order) => (order.id === orderId ? nextOrder : order)),
     );
     return nextOrder;
@@ -534,6 +698,10 @@ export function MercattoProvider({ children }) {
     cart,
     orders,
     sellerOrders,
+    isOrdersLoading,
+    ordersError,
+    isSellerOrdersLoading,
+    sellerOrdersError,
     products,
     businesses,
     myStore,
@@ -564,6 +732,8 @@ export function MercattoProvider({ children }) {
     clearCart,
     confirmOrder,
     updateSellerOrder,
+    refreshBuyerOrders,
+    refreshSellerOrders,
     refreshCatalog,
     saveStore,
     addSellerProduct,
@@ -640,9 +810,7 @@ const orderStatusFromApi = {
 
 const orderStatusToApi = {
   Nuevo: "PENDING",
-  Confirmado: "PROCESSING",
   "En preparación": "PROCESSING",
-  "Listo para retirar": "SHIPPED",
   Enviado: "SHIPPED",
   Entregado: "DELIVERED",
   Cancelado: "CANCELLED",
@@ -763,11 +931,31 @@ function mapApiProduct(product, store) {
 function mapApiOrder(order, extras = {}) {
   const entity = order?.data || order;
   const status = orderStatusFromApi[entity.status] || entity.status || "Nuevo";
-  const itemNames = (entity.items || []).map((item) => item.product?.name || "Producto");
+  const apiItems = entity.items || [];
+  const productIds = apiItems
+    .map((item) => item.product?.id || item.product_id)
+    .filter(Boolean);
+  const inferredProduct = extras.catalogProducts?.find((product) =>
+    productIds.includes(product.id),
+  );
+  const inferredBusiness = extras.catalogBusinesses?.find(
+    (business) => business.id === inferredProduct?.businessId,
+  );
+  const store = extras.store || entity.store || inferredBusiness;
+  const itemNames = apiItems.map((item) => {
+    const quantity = Math.max(1, Number(item.quantity || 1));
+    const name =
+      item.product?.name ||
+      extras.catalogProducts?.find(
+        (product) => product.id === item.product_id,
+      )?.name ||
+      "Producto";
+    return quantity > 1 ? `${quantity} x ${name}` : name;
+  });
   return {
     id: entity.id,
-    businessId: entity.store?.id,
-    businessName: entity.store?.name || "Mercatto",
+    businessId: store?.id || inferredProduct?.businessId || null,
+    businessName: store?.name || getPickupBusinessName(entity.delivery_address),
     buyer: entity.customer_name,
     phone: entity.customer_phone,
     address: entity.delivery_address,
@@ -780,12 +968,88 @@ function mapApiOrder(order, extras = {}) {
       (String(entity.delivery_address || "").startsWith("Retiro en")
         ? "Retiro en local"
         : "Delivery"),
-    eta: "Por confirmar",
+    eta: getOrderEta(status),
     payment: extras.paymentMethod || "Por confirmar",
-    items: itemNames,
-    apiItems: entity.items || [],
+    items: itemNames.length ? itemNames : ["Productos no disponibles"],
+    productIds,
+    apiItems,
     isBackendEntity: true,
   };
+}
+
+function createEmptyCart() {
+  return {
+    businessId: null,
+    items: [],
+    deliveryMode: "Delivery",
+    paymentMethod: "Efectivo",
+    coupon: "",
+  };
+}
+
+function normalizeStoredCart(storedCart) {
+  if (!storedCart || !Array.isArray(storedCart.items)) {
+    return createEmptyCart();
+  }
+
+  const items = storedCart.items
+    .filter((item) => item?.product?.id && Number(item.quantity) > 0)
+    .map((item) => ({
+      ...item,
+      quantity: Math.max(1, Math.floor(Number(item.quantity))),
+    }));
+
+  return {
+    ...createEmptyCart(),
+    ...storedCart,
+    businessId: items.length ? storedCart.businessId : null,
+    items,
+  };
+}
+
+function enrichOrderWithCatalog(order, catalogProducts, catalogBusinesses) {
+  if (!order) return order;
+
+  const existingBusiness = catalogBusinesses.find(
+    (business) => business.id === order.businessId,
+  );
+  const matchingProduct = catalogProducts.find((product) =>
+    order.productIds?.includes(product.id),
+  );
+  const inferredBusiness = catalogBusinesses.find(
+    (business) => business.id === matchingProduct?.businessId,
+  );
+  const business = existingBusiness || inferredBusiness;
+
+  if (!business) return order;
+  if (
+    order.businessId === business.id &&
+    order.businessName === business.name
+  ) {
+    return order;
+  }
+
+  return {
+    ...order,
+    businessId: business.id,
+    businessName: business.name,
+  };
+}
+
+function getPickupBusinessName(address) {
+  const pickupMatch = String(address || "").match(/^Retiro en\s+(.+)$/i);
+  return pickupMatch?.[1]?.trim() || "Mercatto";
+}
+
+function getOrderEta(status) {
+  const etaByStatus = {
+    Nuevo: "Esperando confirmación",
+    "En preparación": "Preparando tu pedido",
+    Enviado: "En camino",
+    Entregado: "Pedido entregado",
+    Cancelado: "Pedido cancelado",
+  };
+  return etaByStatus[status] || "Por confirmar";
 }
 
 async function getAllPages(fetchPage) {

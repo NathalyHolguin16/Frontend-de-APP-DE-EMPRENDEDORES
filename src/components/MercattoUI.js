@@ -1,8 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Children } from "react";
+import { Children, useState } from "react";
 import {
     Image,
+    Platform,
     Pressable,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -36,14 +38,56 @@ export function useResponsiveLayout() {
   };
 }
 
-export function Screen({ children, scroll = true, style, contentStyle }) {
+export function Screen({
+  children,
+  scroll = true,
+  refreshable = true,
+  style,
+  contentStyle,
+}) {
   const Wrapper = scroll ? ScrollView : View;
   const { isCompactLandscape } = useResponsiveLayout();
+  const {
+    user,
+    mode,
+    refreshBuyerOrders,
+    refreshCatalog,
+    refreshSellerOrders,
+  } = useMercatto();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const canRefresh =
+    scroll && refreshable && !!user && Platform.OS !== "web";
+  const refreshScreen = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    const requests = [refreshCatalog()];
+    if (mode === "entrepreneur") {
+      requests.push(refreshSellerOrders({ silent: true }));
+    } else {
+      requests.push(refreshBuyerOrders({ silent: true }));
+    }
+    await Promise.allSettled(requests);
+    setIsRefreshing(false);
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, style]}>
       <Wrapper
         contentInsetAdjustmentBehavior={scroll ? "automatic" : undefined}
         keyboardShouldPersistTaps={scroll ? "handled" : undefined}
+        refreshControl={
+          canRefresh ? (
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={refreshScreen}
+              colors={[colors.primaryDark]}
+              progressBackgroundColor={colors.white}
+              tintColor={colors.primaryDark}
+              title="Actualizando..."
+              titleColor={colors.muted}
+            />
+          ) : undefined
+        }
         contentContainerStyle={
           scroll
             ? [

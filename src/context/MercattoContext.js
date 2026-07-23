@@ -653,6 +653,39 @@ export function MercattoProvider({ children }) {
     return nextOrder;
   };
 
+  const cancelBuyerOrder = async (orderId) => {
+    const currentOrder = orders.find((order) => order.id === orderId);
+    if (!currentOrder?.businessId) {
+      throw new Error("No encontramos la tienda asociada a este pedido.");
+    }
+    if (!["Nuevo", "En preparación"].includes(currentOrder.status)) {
+      throw new Error("Este pedido ya no admite cancelación.");
+    }
+
+    const response = await updateOrderStatus(
+      currentOrder.businessId,
+      currentOrder.id,
+      "CANCELLED",
+    );
+    const nextOrder = mapApiOrder(response, {
+      store: {
+        id: currentOrder.businessId,
+        name: currentOrder.businessName,
+      },
+      deliveryMode: currentOrder.deliveryMode,
+      paymentMethod: currentOrder.payment,
+      catalogProducts: products,
+      catalogBusinesses: businesses,
+    });
+    const nextOrders = orders.map((order) =>
+      order.id === orderId ? nextOrder : order,
+    );
+    setOrders(nextOrders);
+    if (user) await saveStoredOrders(user, nextOrders);
+    showNotice("Pedido cancelado correctamente.");
+    return nextOrder;
+  };
+
   const saveStore = async (payload) => {
     const requestPayload = {
       name: payload.name.trim(),
@@ -752,6 +785,7 @@ export function MercattoProvider({ children }) {
     setCartMeta,
     clearCart,
     confirmOrder,
+    cancelBuyerOrder,
     updateSellerOrder,
     refreshBuyerOrders,
     refreshSellerOrders,

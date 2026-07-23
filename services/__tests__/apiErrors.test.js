@@ -17,5 +17,8 @@ describe("mensajes de la API", () => {
     expect(toSpanishApiMessage("", 403)).toBe(
       "No tienes autorización para realizar esta acción.",
     );
+    expect(toSpanishApiMessage("This action is unauthorized.", 403)).toBe(
+      "No tienes autorización para realizar esta acción.",
+    );
   });
 });

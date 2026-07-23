@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -956,14 +957,53 @@ export function BuyerOrdersScreen({ navigation }) {
     isOrdersLoading,
     ordersError,
     refreshBuyerOrders,
+    cancelBuyerOrder,
   } = useMercatto();
   const [activeGroup, setActiveGroup] = useState("En curso");
+  const [cancellingOrderId, setCancellingOrderId] = useState(null);
+  const [cancellationMessage, setCancellationMessage] = useState("");
   const groups = {
     "En curso": orders.filter((order) => !["Entregado", "Cancelado"].includes(order.status)),
     Completados: orders.filter((order) => order.status === "Entregado"),
     Cancelados: orders.filter((order) => order.status === "Cancelado"),
   };
   const visibleOrders = groups[activeGroup];
+  const requestCancellation = (order) => {
+    const shortId = String(order.id).slice(0, 8).toUpperCase();
+    const cancelOrder = async () => {
+      setCancellingOrderId(order.id);
+      setCancellationMessage("");
+      try {
+        await cancelBuyerOrder(order.id);
+        setActiveGroup("Cancelados");
+      } catch (error) {
+        setCancellationMessage(
+          error?.message || "No pudimos cancelar el pedido.",
+        );
+      } finally {
+        setCancellingOrderId(null);
+      }
+    };
+    const prompt = `¿Deseas cancelar el pedido #${shortId}?`;
+
+    if (Platform.OS === "web") {
+      if (globalThis.confirm?.(prompt)) cancelOrder();
+      return;
+    }
+
+    Alert.alert(
+      "Cancelar pedido",
+      prompt,
+      [
+        { text: "Volver", style: "cancel" },
+        {
+          text: "Cancelar pedido",
+          style: "destructive",
+          onPress: cancelOrder,
+        },
+      ],
+    );
+  };
 
   return (
     <Screen>
@@ -997,6 +1037,12 @@ export function BuyerOrdersScreen({ navigation }) {
         ))}
       </ScrollView>
 
+      {cancellationMessage ? (
+        <Text selectable style={styles.orderError}>
+          {cancellationMessage}
+        </Text>
+      ) : null}
+
       {isOrdersLoading && !orders.length ? (
         <Card style={styles.loadingCard}>
           <ActivityIndicator color={colors.primaryDark} size="large" />
@@ -1020,6 +1066,8 @@ export function BuyerOrdersScreen({ navigation }) {
             key={order.id}
             order={order}
             navigation={navigation}
+            isCancelling={cancellingOrderId === order.id}
+            onCancel={() => requestCancellation(order)}
           />
         ))
       ) : null}
@@ -1045,7 +1093,12 @@ export function BuyerOrdersScreen({ navigation }) {
   );
 }
 
-function BuyerOrderCard({ order, navigation }) {
+function BuyerOrderCard({
+  order,
+  navigation,
+  isCancelling = false,
+  onCancel,
+}) {
   const shortId = String(order.id || "")
     .slice(0, 8)
     .toUpperCase();
@@ -1081,6 +1134,16 @@ function BuyerOrderCard({ order, navigation }) {
           }
           style={{ flex: 1 }}
         />
+        {["Nuevo", "En preparación"].includes(order.status) ? (
+          <PrimaryButton
+            title={isCancelling ? "Cancelando..." : "Cancelar pedido"}
+            icon="close-circle-outline"
+            variant="ghost"
+            disabled={isCancelling}
+            onPress={onCancel}
+            style={{ flex: 1 }}
+          />
+        ) : null}
       </View>
     </Card>
   );
@@ -1983,6 +2046,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
+  },
+  orderError: {
+    color: "#B42318",
+    fontWeight: "850",
+    lineHeight: 20,
   },
   banner: {
     width: 280,

@@ -5,6 +5,7 @@ import {
   Alert,
   Image,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -206,6 +207,31 @@ export function SellerOrdersScreen() {
     }
   };
 
+  const confirmCancellation = (order) => {
+    const title =
+      order.status === "Nuevo" ? "Rechazar pedido" : "Cancelar pedido";
+    const prompt = `Esta acción marcará el pedido #${String(order.id).slice(0, 8).toUpperCase()} como cancelado.`;
+    const cancelOrder = () => changeStatus(order.id, "Cancelado");
+
+    if (Platform.OS === "web") {
+      if (globalThis.confirm?.(`${title}\n\n${prompt}`)) cancelOrder();
+      return;
+    }
+
+    Alert.alert(
+      title,
+      prompt,
+      [
+        { text: "Volver", style: "cancel" },
+        {
+          text: order.status === "Nuevo" ? "Rechazar" : "Cancelar pedido",
+          style: "destructive",
+          onPress: cancelOrder,
+        },
+      ],
+    );
+  };
+
   const contactBuyer = async (phone) => {
     const normalizedPhone = String(phone || "").replace(/[^\d+]/g, "");
     if (!normalizedPhone) {
@@ -304,11 +330,12 @@ export function SellerOrdersScreen() {
             {order.status === "Nuevo" ? (
               <>
                 <PrimaryButton title="Aceptar" disabled={updatingOrderId === order.id} onPress={() => changeStatus(order.id, "En preparación")} style={{ flex: 1 }} />
-                <PrimaryButton title="Rechazar" disabled={updatingOrderId === order.id} variant="secondary" onPress={() => changeStatus(order.id, "Cancelado")} style={{ flex: 1 }} />
+                <PrimaryButton title="Rechazar" disabled={updatingOrderId === order.id} variant="secondary" onPress={() => confirmCancellation(order)} style={{ flex: 1 }} />
               </>
             ) : !["Entregado", "Cancelado"].includes(order.status) ? (
               <>
                 <PrimaryButton title={`Marcar como ${nextStatus(order.status).toLowerCase()}`} disabled={updatingOrderId === order.id} onPress={() => changeStatus(order.id, nextStatus(order.status))} style={{ flex: 1 }} />
+                <PrimaryButton title="Cancelar pedido" disabled={updatingOrderId === order.id} variant="secondary" onPress={() => confirmCancellation(order)} style={{ flex: 1 }} />
               </>
             ) : null}
             <PrimaryButton title="Contactar" variant="secondary" onPress={() => contactBuyer(order.phone)} style={{ flex: 1 }} />

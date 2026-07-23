@@ -24,10 +24,10 @@ export function toSpanishApiMessage(message, status) {
   ) {
     return "El correo o la contraseña son incorrectos.";
   }
-  if (lower.includes("unauthenticated") || lower.includes("unauthorized")) {
+  if (lower.includes("unauthenticated")) {
     return "Tu sesión venció. Inicia sesión nuevamente.";
   }
-  if (lower.includes("forbidden")) {
+  if (lower.includes("unauthorized") || lower.includes("forbidden")) {
     return "No tienes autorización para realizar esta acción.";
   }
   if (lower.includes("not found")) {

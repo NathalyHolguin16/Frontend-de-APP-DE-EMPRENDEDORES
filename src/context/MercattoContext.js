@@ -8,6 +8,10 @@ import {
 
 import { cities } from "../data/mercattoData";
 import {
+  getProductPresentation,
+  getStorePresentation,
+} from "../data/catalogPresentation";
+import {
   clearStoredToken,
   createAddress as createAddressRequest,
   createOrder as createOrderRequest,
@@ -646,6 +650,7 @@ const orderStatusToApi = {
 
 function mapApiStore(store) {
   const entity = store?.data || store;
+  const presentation = getStorePresentation(entity);
   return {
     id: entity.id,
     name: entity.name,
@@ -653,28 +658,52 @@ function mapApiStore(store) {
     slug: entity.slug,
     shortDescription: entity.description || "Emprendimiento local en Mercatto.",
     about: entity.description || "Conoce los productos de este emprendimiento local.",
-    category: entity.category?.name || entity.category || "Emprendimientos",
-    subcategory: "Catálogo local",
-    city: entity.city || null,
-    address: entity.address || "",
+    category:
+      entity.category?.name ||
+      entity.category ||
+      presentation.category ||
+      "Emprendimientos",
+    subcategory: presentation.subcategory || "Catálogo local",
+    city: entity.city || presentation.city || null,
+    address: entity.address || presentation.address || "",
     contact: entity.phone,
     phone: entity.phone,
     owner: entity.owner,
-    hero: entity.cover_url || entity.cover || null,
-    cover: entity.cover_url || entity.cover || null,
-    rating: Number(entity.rating || 0),
-    reviews: Number(entity.reviews_count || 0),
-    deliveryTime: entity.delivery_time || "Por confirmar",
-    preparationTime: entity.preparation_time || "Por confirmar",
-    deliveryCost: Number(entity.delivery_cost || 0),
-    minimumOrder: Number(entity.minimum_order || 0),
-    freeShippingFrom: Number(entity.free_shipping_from || 0),
-    status: entity.is_active === false ? "No disponible" : "Disponible",
-    tags: toStringArray(entity.tags),
-    modality: toStringArray(entity.delivery_modes, ["Retiro en local"]),
-    paymentMethods: toStringArray(entity.payment_methods, ["Efectivo"]),
+    hero: entity.cover_url || entity.cover || presentation.hero || null,
+    cover: entity.cover_url || entity.cover || presentation.hero || null,
+    rating: Number(entity.rating || presentation.rating || 0),
+    reviews: Number(entity.reviews_count || presentation.reviews || 0),
+    deliveryTime:
+      entity.delivery_time || presentation.deliveryTime || "Por confirmar",
+    preparationTime:
+      entity.preparation_time ||
+      presentation.preparationTime ||
+      "Por confirmar",
+    deliveryCost: Number(
+      entity.delivery_cost ?? presentation.deliveryCost ?? 0,
+    ),
+    minimumOrder: Number(
+      entity.minimum_order ?? presentation.minimumOrder ?? 0,
+    ),
+    freeShippingFrom: Number(
+      entity.free_shipping_from ?? presentation.freeShippingFrom ?? 0,
+    ),
+    status:
+      entity.is_active === false
+        ? "No disponible"
+        : presentation.status || "Disponible",
+    schedule: entity.schedule || presentation.schedule || "Horario por confirmar",
+    tags: toStringArray(entity.tags, presentation.tags),
+    modality: toStringArray(
+      entity.delivery_modes,
+      presentation.modality || ["Retiro en local"],
+    ),
+    paymentMethods: toStringArray(
+      entity.payment_methods,
+      presentation.paymentMethods || ["Efectivo"],
+    ),
     socials: entity.socials || "",
-    policies: toStringArray(entity.policies),
+    policies: toStringArray(entity.policies, presentation.policies),
     isBackendEntity: true,
   };
 }
@@ -682,25 +711,46 @@ function mapApiStore(store) {
 function mapApiProduct(product, store) {
   const entity = product?.data || product;
   const stock = Number(entity.stock || 0);
+  const presentation = getProductPresentation(entity);
+  const oldPrice = Number(entity.old_price || presentation.oldPrice || 0);
+  const price = Number(entity.price || 0);
+  const discount =
+    Number(entity.discount || 0) ||
+    (oldPrice > price ? Math.round(((oldPrice - price) / oldPrice) * 100) : 0);
   return {
     id: entity.id,
     businessId: entity.store?.id || store?.id,
     name: entity.name,
     description: entity.description,
     fullDescription: entity.description,
-    price: Number(entity.price || 0),
-    oldPrice: null,
-    discount: 0,
-    badges: entity.is_active === false ? ["Pausado"] : [],
+    price,
+    oldPrice: oldPrice || null,
+    discount,
+    badges:
+      entity.is_active === false
+        ? ["Pausado"]
+        : toStringArray(entity.badges, presentation.badges || ["Disponible"]),
     availability: entity.is_active === false ? "No disponible" : stock <= 3 ? "Stock bajo" : "Disponible",
     stock,
     isActive: entity.is_active !== false,
     store: entity.store || store,
-    image: entity.image_url || entity.image || null,
-    category: entity.category?.name || entity.category || "Producto",
-    variants: toStringArray(entity.variants, ["Estándar"]),
-    complements: toStringArray(entity.complements, ["Sin complemento"]),
-    prepTime: entity.preparation_time || "Por confirmar",
+    image: entity.image_url || entity.image || presentation.image || null,
+    category:
+      entity.category?.name ||
+      entity.category ||
+      presentation.category ||
+      "Producto",
+    variants: toStringArray(
+      entity.variants,
+      presentation.variants || ["Estándar"],
+    ),
+    complements: toStringArray(
+      entity.complements,
+      presentation.complements || ["Sin complemento"],
+    ),
+    prepTime:
+      entity.preparation_time || presentation.prepTime || "Por confirmar",
+    validity: entity.validity || presentation.validity || "Promoción vigente",
     isBackendEntity: true,
   };
 }

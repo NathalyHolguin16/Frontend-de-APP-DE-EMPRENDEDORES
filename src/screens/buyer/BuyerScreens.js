@@ -27,6 +27,7 @@ import {
   Meta,
   PrimaryButton,
   ProductCard,
+  PromoCard,
   Screen,
   SearchBar,
   SectionHeader,
@@ -87,6 +88,12 @@ export function BuyerHomeScreen({ navigation }) {
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
+  const visibleBusinessIds = new Set(
+    filteredBusinesses.map((business) => business.id),
+  );
+  const visibleProducts = products.filter((product) =>
+    visibleBusinessIds.has(product.businessId),
+  );
 
   return (
     <Screen style={styles.homeSafe} contentStyle={styles.homeContent}>
@@ -121,8 +128,8 @@ export function BuyerHomeScreen({ navigation }) {
 
       <HeroDealCard
         navigation={navigation}
-        products={products}
-        businessCount={businesses.length}
+        products={visibleProducts}
+        businessCount={filteredBusinesses.length}
         city={selectedCity}
       />
 
@@ -847,16 +854,80 @@ export function OrderConfirmationScreen({ route, navigation }) {
 }
 
 export function PromosScreen({ navigation }) {
+  const {
+    businesses,
+    products,
+    selectedCity,
+    isCatalogLoading,
+    catalogError,
+    refreshCatalog,
+  } = useMercatto();
+  const localBusinessIds = new Set(
+    businesses
+      .filter((business) => !business.city || business.city === selectedCity)
+      .map((business) => business.id),
+  );
+  const promotions = products.filter(
+    (product) =>
+      localBusinessIds.has(product.businessId) &&
+      product.discount > 0 &&
+      product.image,
+  );
+
   return (
     <Screen>
       <Text style={typography.h1}>Promos</Text>
-      <EmptyState
-        icon="pricetag-outline"
-        title="Sin promociones publicadas"
-        message="Las promociones aparecerán aquí cuando los emprendimientos las publiquen."
-        action="Explorar emprendimientos"
-        onPress={() => navigation.navigate("Inicio")}
-      />
+      <Text style={typography.muted}>
+        Ofertas disponibles en {selectedCity} por tiempo limitado.
+      </Text>
+      {isCatalogLoading ? (
+        <Card style={styles.loadingCard}>
+          <ActivityIndicator color={colors.primaryDark} size="large" />
+          <Text style={typography.muted}>Buscando promociones...</Text>
+        </Card>
+      ) : null}
+      {!isCatalogLoading && catalogError ? (
+        <EmptyState
+          icon="cloud-offline-outline"
+          title="No pudimos cargar las promociones"
+          message={catalogError}
+          action="Intentar nuevamente"
+          onPress={refreshCatalog}
+        />
+      ) : null}
+      {!isCatalogLoading && !catalogError && promotions.length ? (
+        <>
+          <SectionHeader title={`${promotions.length} ofertas disponibles`} />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.horizontal}
+          >
+            {promotions.map((promo) => (
+              <PromoCard
+                key={promo.id}
+                promo={promo}
+                businessName={
+                  businesses.find((business) => business.id === promo.businessId)
+                    ?.name || "Mercatto"
+                }
+                onPress={() =>
+                  navigation.navigate("ProductDetail", { productId: promo.id })
+                }
+              />
+            ))}
+          </ScrollView>
+        </>
+      ) : null}
+      {!isCatalogLoading && !catalogError && !promotions.length ? (
+        <EmptyState
+          icon="pricetag-outline"
+          title="Sin promociones publicadas"
+          message="Las promociones aparecerán aquí cuando los emprendimientos las publiquen."
+          action="Explorar emprendimientos"
+          onPress={() => navigation.navigate("Inicio")}
+        />
+      ) : null}
     </Screen>
   );
 }

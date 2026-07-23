@@ -104,14 +104,19 @@ export function IconButton({
   badge,
   color = colors.ink,
   style,
+  disabled = false,
+  accessibilityLabel,
 }) {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.iconButton,
-        pressed && styles.pressed,
+        disabled && styles.disabled,
+        pressed && !disabled && styles.pressed,
         style,
       ]}
     >
@@ -276,57 +281,6 @@ export function PasswordStrength({ result }) {
   );
 }
 
-export function BuyerHeader({ navigation, title = "Hola, María" }) {
-  const { selectedCity, deliveryAddress, cart } = useMercatto();
-  const cartCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
-  return (
-    <View style={styles.buyerHeader}>
-      <View style={styles.headerTop}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.greeting}>{title}</Text>
-          <Pressable
-            onPress={() => navigation.navigate("CitySelect", { fromApp: true })}
-            style={styles.cityRow}
-          >
-            <Ionicons
-              name="location-outline"
-              size={16}
-              color={colors.primaryDark}
-            />
-            <Text style={styles.cityText}>{selectedCity}</Text>
-            <Ionicons
-              name="chevron-down"
-              size={15}
-              color={colors.primaryDark}
-            />
-          </Pressable>
-        </View>
-        <IconButton
-          icon="notifications-outline"
-          onPress={() =>
-            navigation.navigate("StateScreen", { type: "notifications" })
-          }
-        />
-        <IconButton
-          icon="cart-outline"
-          badge={cartCount || null}
-          onPress={() => navigation.navigate("Cart")}
-        />
-      </View>
-      <Pressable
-        onPress={() => navigation.navigate("Address")}
-        style={styles.addressRow}
-      >
-        <Ionicons name="navigate-outline" size={16} color={colors.muted} />
-        <Text numberOfLines={1} style={styles.addressText}>
-          {deliveryAddress}
-        </Text>
-        <Text style={styles.changeText}>Cambiar</Text>
-      </Pressable>
-    </View>
-  );
-}
-
 export function SearchBar({ value, onChangeText, placeholder }) {
   return (
     <View style={styles.searchBar}>
@@ -353,11 +307,21 @@ export function BusinessCard({
       onPress={onPress}
       style={({ pressed }) => [styles.businessCard, pressed && styles.pressed]}
     >
-      <Image
-        source={{ uri: business.hero }}
-        style={styles.businessImage}
-        resizeMode="cover"
-      />
+      {business.hero ? (
+        <Image
+          source={{ uri: business.hero }}
+          style={styles.businessImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={[styles.businessImage, styles.imagePlaceholder]}>
+          <Ionicons
+            name="storefront-outline"
+            size={38}
+            color={colors.primaryDark}
+          />
+        </View>
+      )}
       <View style={styles.favoriteFloating}>
         <IconButton
           icon={favorite ? "heart" : "heart-outline"}
@@ -402,17 +366,34 @@ export function BusinessCard({
   );
 }
 
-export function ProductCard({ product, onPress, onAdd }) {
+export function ProductCard({
+  product,
+  onPress,
+  onAdd,
+  added = false,
+  addDisabled = false,
+  showAdd = true,
+}) {
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.productCard, pressed && styles.pressed]}
     >
-      <Image
-        source={{ uri: product.image }}
-        style={styles.productImage}
-        resizeMode="cover"
-      />
+      {product.image ? (
+        <Image
+          source={{ uri: product.image }}
+          style={styles.productImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={[styles.productImage, styles.imagePlaceholder]}>
+          <Ionicons
+            name="image-outline"
+            size={30}
+            color={colors.primaryDark}
+          />
+        </View>
+      )}
       <View style={styles.productContent}>
         <Text style={styles.productName}>{product.name}</Text>
         <Text style={styles.productDesc} numberOfLines={2}>
@@ -429,12 +410,20 @@ export function ProductCard({ product, onPress, onAdd }) {
         </View>
         <View style={styles.productFooter}>
           <Chip label={product.badges[0]} tone={colors.softOrange} />
-          <IconButton
-            icon="add"
-            onPress={onAdd}
-            color={colors.white}
-            style={styles.addButton}
-          />
+          {showAdd ? (
+            <IconButton
+              icon={added ? "checkmark" : "add"}
+              onPress={onAdd}
+              color={colors.white}
+              disabled={addDisabled}
+              accessibilityLabel={
+                added
+                  ? `${product.name} agregado al carrito`
+                  : `Agregar ${product.name} al carrito`
+              }
+              style={[styles.addButton, added && styles.addButtonSuccess]}
+            />
+          ) : null}
         </View>
       </View>
     </Pressable>
@@ -506,6 +495,38 @@ export function EmptyState({
         <PrimaryButton title={action} onPress={onPress} variant="secondary" />
       ) : null}
     </Card>
+  );
+}
+
+export function MercattoToast() {
+  const { notice } = useMercatto();
+  if (!notice?.message) return null;
+
+  const isError = notice.tone === "error";
+  const isInfo = notice.tone === "info";
+  return (
+    <View
+      accessibilityLiveRegion="polite"
+      style={[
+        styles.toast,
+        { pointerEvents: "none" },
+        isError && styles.toastError,
+        isInfo && styles.toastInfo,
+      ]}
+    >
+      <Ionicons
+        name={
+          isError
+            ? "alert-circle-outline"
+            : isInfo
+              ? "information-circle-outline"
+              : "checkmark-circle-outline"
+        }
+        size={22}
+        color={colors.white}
+      />
+      <Text style={styles.toastText}>{notice.message}</Text>
+    </View>
   );
 }
 
@@ -794,6 +815,10 @@ const styles = StyleSheet.create({
     width: "100%",
     backgroundColor: colors.softOrange,
   },
+  imagePlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
   favoriteFloating: {
     position: "absolute",
     right: 12,
@@ -857,6 +882,39 @@ const styles = StyleSheet.create({
     width: 112,
     minHeight: 150,
     backgroundColor: colors.softOrange,
+  },
+  addButtonSuccess: {
+    backgroundColor: colors.green,
+  },
+  toast: {
+    position: "absolute",
+    zIndex: 1000,
+    top: 56,
+    alignSelf: "center",
+    width: "92%",
+    maxWidth: 560,
+    minHeight: 52,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.green,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    ...shadows.card,
+  },
+  toastError: {
+    backgroundColor: colors.red,
+  },
+  toastInfo: {
+    backgroundColor: colors.ink,
+  },
+  toastText: {
+    flex: 1,
+    color: colors.white,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "850",
   },
   productContent: {
     flex: 1,

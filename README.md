@@ -1,50 +1,80 @@
-# Welcome to your Expo app 👋
+# Mercatto Frontend
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Aplicación móvil Expo/React Native para comprar en emprendimientos locales y
+administrar tiendas, productos y pedidos.
 
-## Get started
+## Requisitos
 
-1. Install dependencies
+- Node.js 20 o superior.
+- npm.
+- Expo Go para pruebas en dispositivo o un emulador Android/iOS.
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Configuración
 
 ```bash
-npm run reset-project
+npm install
+cp .env.example .env
+npm start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+La API utilizada por defecto es:
 
-## Learn more
+```text
+https://mercatto-back.onrender.com
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Variables disponibles:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```dotenv
+EXPO_PUBLIC_MERCATTO_API_URL=https://mercatto-back.onrender.com
+EXPO_PUBLIC_MERCATTO_PUBLIC_URL=
+```
 
-## Join the community
+`EXPO_PUBLIC_MERCATTO_PUBLIC_URL` es opcional y habilita los enlaces públicos
+para compartir tiendas.
 
-Join our community of developers creating universal apps.
+## Módulos
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- Autenticación y perfil.
+- Catálogo de tiendas y productos.
+- Carrito, checkout y pedidos.
+- Direcciones con mapa y geolocalización.
+- Panel emprendedor.
+- Gestión de tienda, productos y pedidos.
+
+## Verificación
+
+```bash
+npm run lint
+npm test
+npm run test:api
+```
+
+`npm run test:api` consulta el catálogo público sin crear ni modificar datos.
+`npm run test-auth` crea una cuenta temporal y debe utilizarse únicamente cuando
+se desee comprobar registro e inicio de sesión contra el backend.
+
+## Compilación Android
+
+El perfil `preview` de EAS genera un APK instalable:
+
+```bash
+npx eas-cli login
+npx eas-cli build --platform android --profile preview
+```
+
+La configuración se encuentra en `app.json` y `eas.json`.
+
+## Estructura
+
+```text
+App.js                 Navegación principal
+services/              Cliente de la API REST
+src/components/        Componentes reutilizables
+src/context/           Estado global y operaciones
+src/screens/auth/      Autenticación y registro
+src/screens/buyer/     Experiencia del comprador
+src/screens/entrepreneur/ Panel del emprendedor
+src/theme/             Colores y estilos compartidos
+src/utils/             Validaciones y utilidades
+```

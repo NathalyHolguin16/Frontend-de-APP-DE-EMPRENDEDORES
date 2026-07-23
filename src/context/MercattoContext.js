@@ -1,16 +1,19 @@
-import { createContext, useContext, useEffect, useState } from "react";
-
 import {
-  businesses as demoBusinesses,
-  cities,
-  products as demoProducts,
-} from "../data/mercattoData";
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import { cities } from "../data/mercattoData";
 import {
   clearStoredToken,
   createAddress as createAddressRequest,
   createOrder as createOrderRequest,
   createProduct as createProductRequest,
   createStore as createStoreRequest,
+  deleteAddress as deleteAddressRequest,
   deleteProduct as deleteProductRequest,
   getAddresses,
   getCachedProfile,
@@ -37,10 +40,9 @@ export function MercattoProvider({ children }) {
   const [mode, setMode] = useState("buyer");
   const [selectedCity, setSelectedCity] = useState(cities[0]);
   const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [businesses, setBusinesses] = useState(demoBusinesses);
-  const [products, setProducts] = useState(demoProducts);
+  const [businesses, setBusinesses] = useState([]);
+  const [products, setProducts] = useState([]);
   const [myStore, setMyStore] = useState(null);
-  const [catalogSource, setCatalogSource] = useState("demo");
   const [isCatalogLoading, setIsCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
   const [favorites, setFavorites] = useState(["dulce-orilla"]);
@@ -53,37 +55,46 @@ export function MercattoProvider({ children }) {
   });
   const [orders, setOrders] = useState([]);
   const [sellerOrders, setSellerOrders] = useState([]);
+  const [notice, setNotice] = useState(null);
+  const noticeTimerRef = useRef(null);
+  const lastCartAddRef = useRef({ productId: null, timestamp: 0 });
+
+  const showNotice = (message, tone = "success") => {
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    setNotice({ message, tone });
+    noticeTimerRef.current = setTimeout(() => setNotice(null), 2800);
+  };
 
   const refreshCatalog = async () => {
     setIsCatalogLoading(true);
     setCatalogError("");
     try {
-      const storeResponse = await getStores();
-      const apiStores = storeResponse?.data || [];
+      const apiStores = await getAllPages((page) => getStores(page));
       if (!apiStores.length) {
-        setBusinesses(demoBusinesses);
-        setProducts(demoProducts);
-        setCatalogSource("demo");
-        return { businesses: demoBusinesses, products: demoProducts };
+        setBusinesses([]);
+        setProducts([]);
+        return { businesses: [], products: [] };
       }
 
       const nextBusinesses = apiStores.map(mapApiStore);
       const productResponses = await Promise.all(
-        apiStores.map((store) => getStoreProducts(store.id)),
+        apiStores.map((store) =>
+          getAllPages((page) => getStoreProducts(store.id, page)),
+        ),
       );
-      const nextProducts = productResponses.flatMap((response, index) =>
-        (response?.data || []).map((product) => mapApiProduct(product, apiStores[index])),
+      const nextProducts = productResponses.flatMap((storeProducts, index) =>
+        storeProducts.map((product) =>
+          mapApiProduct(product, apiStores[index]),
+        ),
       );
       setBusinesses(nextBusinesses);
       setProducts(nextProducts);
-      setCatalogSource("backend");
       return { businesses: nextBusinesses, products: nextProducts };
     } catch (error) {
       setCatalogError(error?.message || "No pudimos actualizar el catálogo.");
-      setBusinesses(demoBusinesses);
-      setProducts(demoProducts);
-      setCatalogSource("demo");
-      return { businesses: demoBusinesses, products: demoProducts };
+      setBusinesses([]);
+      setProducts([]);
+      return { businesses: [], products: [] };
     } finally {
       setIsCatalogLoading(false);
     }
@@ -92,6 +103,13 @@ export function MercattoProvider({ children }) {
   useEffect(() => {
     refreshCatalog();
   }, []);
+
+  useEffect(
+    () => () => {
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    },
+    [],
+  );
 
   const login = async ({ identifier, password }) => {
     const response = await loginUser({
@@ -142,19 +160,20 @@ export function MercattoProvider({ children }) {
     await saveToken(response.token);
 
     let apiStore = null;
+    let storeRegistrationError = null;
     if (profileType === "entrepreneur") {
       try {
         apiStore = await createStoreRequest(
           {
-            name: data.businessName || `${fullName} Store`,
+            name: data.businessName,
             description: data.shortDescription || data.about || null,
-            phone: data.businessPhone || data.phone || "Sin teléfono",
+            phone: data.businessPhone,
             slug: createSlug(data.businessName || fullName),
           },
           response.token,
         );
-      } catch {
-        apiStore = null;
+      } catch (error) {
+        storeRegistrationError = error;
       }
     }
 
@@ -180,6 +199,12 @@ export function MercattoProvider({ children }) {
     setMode(profileType === "entrepreneur" ? "entrepreneur" : "buyer");
     await saveCachedProfile({ ownerEmail: nextUser.email, profile: nextUser });
     if (apiStore) await refreshCatalog();
+    if (storeRegistrationError) {
+      showNotice(
+        "La cuenta se creó, pero no pudimos registrar la tienda. Completa el proceso desde Mi negocio.",
+        "error",
+      );
+    }
     return nextUser;
   };
 
@@ -210,24 +235,27 @@ export function MercattoProvider({ children }) {
 
   const saveUserProfile = async (patch) => {
     const response = await updateProfileRequest({
+      name: `${patch.firstName || ""} ${patch.lastName || ""}`.trim(),
+      email: patch.email?.trim().toLowerCase(),
       birth_date: patch.birthDate || null,
       gender: patch.gender || null,
     });
-    const apiUser = response?.user || response?.data || response;
+    const apiUser = response?.data || response?.user || response;
+    const fullName = String(apiUser?.name || user?.name || "").trim();
+    const [firstName = "", ...lastNameParts] = fullName.split(/\s+/);
     const nextUser = {
       ...user,
-      ...patch,
       id: apiUser?.id || user?.id,
-      email: apiUser?.email || patch.email || user?.email,
-      birthDate: apiUser?.birth_date || patch.birthDate || "Pendiente",
-      gender: apiUser?.gender || patch.gender || "Pendiente",
-      name: `${patch.firstName || user?.firstName || ""} ${patch.lastName || user?.lastName || ""}`.trim(),
+      firstName,
+      lastName: lastNameParts.join(" "),
+      name: fullName,
+      email: apiUser?.email || user?.email,
+      birthDate: apiUser?.birth_date || "Pendiente",
+      gender: apiUser?.gender || "Pendiente",
+      photo: getInitials(fullName),
     };
-    nextUser.photo = getInitials(nextUser.name);
 
     setUser(nextUser);
-    if (patch.city) setSelectedCity(patch.city);
-    if (patch.address) setDeliveryAddress(patch.address);
     await saveCachedProfile({ ownerEmail: nextUser.email, profile: nextUser });
     return nextUser;
   };
@@ -246,6 +274,37 @@ export function MercattoProvider({ children }) {
     ]);
     updateUserProfile(nextAddress);
     return savedAddress;
+  };
+
+  const selectDeliveryAddress = (address) => {
+    const mappedAddress = mapApiAddress(address);
+    if (!mappedAddress.address) return;
+    updateUserProfile(mappedAddress);
+  };
+
+  const removeDeliveryAddress = async (addressId) => {
+    await deleteAddressRequest(addressId);
+    const remainingAddresses = savedAddresses.filter(
+      (address) => address.id !== addressId,
+    );
+    setSavedAddresses(remainingAddresses);
+
+    if (user?.backendAddressId === addressId) {
+      const nextAddress = getDefaultAddress(remainingAddresses);
+      if (nextAddress) {
+        selectDeliveryAddress(nextAddress);
+      } else {
+        updateUserProfile({
+          backendAddressId: null,
+          address: "",
+          addressSector: "",
+          addressReference: "",
+          addressCoordinates: null,
+        });
+      }
+    }
+
+    showNotice("Dirección eliminada correctamente.");
   };
 
   const logout = async () => {
@@ -275,11 +334,25 @@ export function MercattoProvider({ children }) {
 
   const addToCart = (product, quantity = 1, options = {}) => {
     const currentBusiness = product.businessId;
+    const now = Date.now();
 
     if (cart.businessId && cart.businessId !== currentBusiness && !options.replaceCart) {
       return { conflict: true };
     }
 
+    if (
+      !options.replaceCart &&
+      lastCartAddRef.current.productId === product.id &&
+      now - lastCartAddRef.current.timestamp < 900
+    ) {
+      showNotice(
+        "El producto ya fue agregado. Ajusta la cantidad desde el carrito.",
+        "info",
+      );
+      return { conflict: false, duplicateSuppressed: true };
+    }
+
+    lastCartAddRef.current = { productId: product.id, timestamp: now };
     setCart((current) => {
       const base =
         current.businessId && current.businessId !== currentBusiness
@@ -313,7 +386,8 @@ export function MercattoProvider({ children }) {
       };
     });
 
-    return { conflict: false };
+    showNotice("Producto agregado al carrito correctamente.");
+    return { conflict: false, duplicateSuppressed: false };
   };
 
   const updateCartQuantity = (productId, delta) => {
@@ -346,26 +420,36 @@ export function MercattoProvider({ children }) {
 
   const confirmOrder = async ({ customerPhone }) => {
     const business = businesses.find((item) => item.id === cart.businessId);
-    if (!business?.isBackendEntity || cart.items.some((item) => !item.product.isBackendEntity)) {
-      const error = new Error(
-        "Este catálogo es demostrativo. Registra la tienda y sus productos en Laravel para crear pedidos reales.",
-      );
-      error.status = 409;
-      throw error;
+    if (!business?.isBackendEntity) {
+      throw new Error("No encontramos el emprendimiento de este pedido.");
+    }
+    if (cart.items.some((item) => !item.product.isBackendEntity)) {
+      throw new Error("Uno de los productos ya no está disponible.");
+    }
+    if (cart.deliveryMode === "Delivery" && !deliveryAddress.trim()) {
+      throw new Error("Selecciona una dirección para recibir el pedido.");
     }
 
+    const orderAddress =
+      cart.deliveryMode === "Delivery"
+        ? `${deliveryAddress}, ${selectedCity}`
+        : `Retiro en ${business.name}`;
     const response = await createOrderRequest(business.id, {
       customer_name: user?.name || "Cliente Mercatto",
       customer_phone: customerPhone.trim(),
-      delivery_address: `${deliveryAddress}, ${selectedCity}`,
+      delivery_address: orderAddress,
       items: cart.items.map((item) => ({
         product_id: item.product.id,
         quantity: item.quantity,
       })),
     });
-    const nextOrder = mapApiOrder(response);
+    const nextOrder = mapApiOrder(response, {
+      deliveryMode: cart.deliveryMode,
+      paymentMethod: cart.paymentMethod,
+    });
     setOrders((current) => [nextOrder, ...current]);
     clearCart();
+    showNotice("Pedido enviado correctamente.");
     return nextOrder;
   };
 
@@ -429,8 +513,11 @@ export function MercattoProvider({ children }) {
     (sum, item) => sum + item.product.price * item.quantity,
     0,
   );
-  const cartDelivery = cart.items.length ? cartBusiness?.deliveryCost || 0 : 0;
-  const cartDiscount = cart.coupon.trim().toUpperCase() === "MERCATTO10" ? cartSubtotal * 0.1 : 0;
+  const cartDelivery =
+    cart.items.length && cart.deliveryMode === "Delivery"
+      ? cartBusiness?.deliveryCost || 0
+      : 0;
+  const cartDiscount = 0;
   const cartTotal = Math.max(0, cartSubtotal + cartDelivery - cartDiscount);
 
   const value = {
@@ -446,9 +533,9 @@ export function MercattoProvider({ children }) {
     products,
     businesses,
     myStore,
-    catalogSource,
     isCatalogLoading,
     catalogError,
+    notice,
     cartBusiness,
     cartSubtotal,
     cartDelivery,
@@ -462,6 +549,8 @@ export function MercattoProvider({ children }) {
     updateUserProfile,
     saveUserProfile,
     saveDeliveryAddress,
+    selectDeliveryAddress,
+    removeDeliveryAddress,
     logout,
     toggleFavorite,
     addToCart,
@@ -476,6 +565,7 @@ export function MercattoProvider({ children }) {
     addSellerProduct,
     saveSellerProduct,
     removeSellerProduct,
+    showNotice,
   };
 
   return <MercattoContext.Provider value={value}>{children}</MercattoContext.Provider>;
@@ -496,17 +586,17 @@ function normalizeApiUser(apiUser, extras = {}) {
   const fullName = String(apiUser?.name || extras.name || "Usuario Mercatto").trim();
   const [firstName = "Usuario", ...lastNameParts] = fullName.split(/\s+/);
   const normalized = {
-    id: apiUser?.id,
+    ...extras,
+    id: apiUser?.id || extras.id,
     firstName,
     lastName: lastNameParts.join(" "),
     name: fullName,
     email: apiUser?.email || extras.email || "",
-    idNumber: "Pendiente",
-    birthDate: "Pendiente",
-    gender: "Pendiente",
-    phone: "Pendiente",
-    profiles: ["buyer"],
-    ...extras,
+    idNumber: apiUser?.id_number || extras.idNumber || "Pendiente",
+    birthDate: apiUser?.birth_date || extras.birthDate || "Pendiente",
+    gender: apiUser?.gender || extras.gender || "Pendiente",
+    phone: apiUser?.phone || extras.phone || "Pendiente",
+    profiles: extras.profiles || ["buyer"],
   };
 
   return {
@@ -554,34 +644,45 @@ const orderStatusToApi = {
   Cancelado: "CANCELLED",
 };
 
-function mapApiStore(store, index = 0) {
+function mapApiStore(store) {
   const entity = store?.data || store;
-  const visualFallback = demoBusinesses[index % demoBusinesses.length];
   return {
-    ...visualFallback,
     id: entity.id,
     name: entity.name,
     logo: getInitials(entity.name),
     slug: entity.slug,
     shortDescription: entity.description || "Emprendimiento local en Mercatto.",
     about: entity.description || "Conoce los productos de este emprendimiento local.",
-    category: "Emprendimiento",
+    category: entity.category?.name || entity.category || "Emprendimientos",
     subcategory: "Catálogo local",
-    city: null,
-    address: "No registrada en el backend",
+    city: entity.city || null,
+    address: entity.address || "",
     contact: entity.phone,
     phone: entity.phone,
     owner: entity.owner,
+    hero: entity.cover_url || entity.cover || null,
+    cover: entity.cover_url || entity.cover || null,
+    rating: Number(entity.rating || 0),
+    reviews: Number(entity.reviews_count || 0),
+    deliveryTime: entity.delivery_time || "Por confirmar",
+    preparationTime: entity.preparation_time || "Por confirmar",
+    deliveryCost: Number(entity.delivery_cost || 0),
+    minimumOrder: Number(entity.minimum_order || 0),
+    freeShippingFrom: Number(entity.free_shipping_from || 0),
+    status: entity.is_active === false ? "No disponible" : "Disponible",
+    tags: toStringArray(entity.tags),
+    modality: toStringArray(entity.delivery_modes, ["Retiro en local"]),
+    paymentMethods: toStringArray(entity.payment_methods, ["Efectivo"]),
+    socials: entity.socials || "",
+    policies: toStringArray(entity.policies),
     isBackendEntity: true,
   };
 }
 
 function mapApiProduct(product, store) {
   const entity = product?.data || product;
-  const visualFallback = demoProducts.find((item) => item.businessId === store?.id) || demoProducts[0];
   const stock = Number(entity.stock || 0);
   return {
-    ...visualFallback,
     id: entity.id,
     businessId: entity.store?.id || store?.id,
     name: entity.name,
@@ -595,11 +696,16 @@ function mapApiProduct(product, store) {
     stock,
     isActive: entity.is_active !== false,
     store: entity.store || store,
+    image: entity.image_url || entity.image || null,
+    category: entity.category?.name || entity.category || "Producto",
+    variants: toStringArray(entity.variants, ["Estándar"]),
+    complements: toStringArray(entity.complements, ["Sin complemento"]),
+    prepTime: entity.preparation_time || "Por confirmar",
     isBackendEntity: true,
   };
 }
 
-function mapApiOrder(order) {
+function mapApiOrder(order, extras = {}) {
   const entity = order?.data || order;
   const status = orderStatusFromApi[entity.status] || entity.status || "Nuevo";
   const itemNames = (entity.items || []).map((item) => item.product?.name || "Producto");
@@ -614,13 +720,38 @@ function mapApiOrder(order) {
     time: formatApiDate(entity.created_at),
     status,
     total: Number(entity.total_price || 0),
-    deliveryMode: "Delivery",
+    deliveryMode:
+      extras.deliveryMode ||
+      (String(entity.delivery_address || "").startsWith("Retiro en")
+        ? "Retiro en local"
+        : "Delivery"),
     eta: "Por confirmar",
-    payment: "Por confirmar",
+    payment: extras.paymentMethod || "Por confirmar",
     items: itemNames,
     apiItems: entity.items || [],
     isBackendEntity: true,
   };
+}
+
+async function getAllPages(fetchPage) {
+  const firstResponse = await fetchPage(1);
+  const items = [...(firstResponse?.data || [])];
+  const lastPage = Number(
+    firstResponse?.meta?.last_page ||
+      firstResponse?.last_page ||
+      firstResponse?.meta?.lastPage ||
+      1,
+  );
+
+  if (lastPage <= 1) return items;
+
+  const remainingResponses = await Promise.all(
+    Array.from({ length: lastPage - 1 }, (_, index) => fetchPage(index + 2)),
+  );
+  remainingResponses.forEach((response) => {
+    items.push(...(response?.data || []));
+  });
+  return items;
 }
 
 function normalizeProductPayload(payload) {
@@ -651,6 +782,17 @@ function formatApiDate(value) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function toStringArray(value, fallback = []) {
+  if (Array.isArray(value)) return value.filter(Boolean).map(String);
+  if (typeof value === "string" && value.trim()) {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return fallback;
 }
 
 export function useMercatto() {

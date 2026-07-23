@@ -7,16 +7,15 @@ import { Text } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { MercattoProvider } from "./src/context/MercattoContext";
+import { MercattoToast } from "./src/components/MercattoUI";
 import {
   BuyerRegisterScreen,
   CitySelectScreen,
   EntrepreneurRegisterScreen,
-  ForgotPasswordScreen,
   LoginScreen,
   ModeSelectScreen,
   RegisterRoleScreen,
   SplashScreen,
-  VerificationScreen,
 } from "./src/screens/auth/AuthScreens";
 import {
   AddressScreen,
@@ -31,7 +30,6 @@ import {
   OrderConfirmationScreen,
   ProductDetailScreen,
   PromosScreen,
-  StateScreen,
 } from "./src/screens/buyer/BuyerScreens";
 import {
   EntrepreneurDashboardScreen,
@@ -56,6 +54,21 @@ const theme = {
     border: "#E8E2D8",
   },
 };
+
+const publicBaseUrl = process.env.EXPO_PUBLIC_MERCATTO_PUBLIC_URL?.replace(
+  /\/$/,
+  "",
+);
+const linking = publicBaseUrl
+  ? {
+      prefixes: [publicBaseUrl],
+      config: {
+        screens: {
+          BusinessDetail: "tiendas/:businessId",
+        },
+      },
+    }
+  : undefined;
 
 function TabIcon({ name, color, focused }) {
   return (
@@ -156,17 +169,15 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <MercattoProvider>
-        <NavigationContainer theme={theme}>
+        <NavigationContainer theme={theme} linking={linking}>
           <StatusBar style="dark" />
           <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="Splash" component={SplashScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
             <Stack.Screen name="ModeSelect" component={ModeSelectScreen} />
             <Stack.Screen name="RegisterRole" component={RegisterRoleScreen} />
             <Stack.Screen name="BuyerRegister" component={BuyerRegisterScreen} />
             <Stack.Screen name="EntrepreneurRegister" component={EntrepreneurRegisterScreen} />
-            <Stack.Screen name="Verification" component={VerificationScreen} />
             <Stack.Screen name="CitySelect" component={CitySelectScreen} />
             <Stack.Screen name="BuyerTabs" component={BuyerTabs} />
             <Stack.Screen name="EntrepreneurTabs" component={EntrepreneurTabs} />
@@ -178,9 +189,9 @@ export default function App() {
             <Stack.Screen name="Favorites" component={FavoritesScreen} />
             <Stack.Screen name="Address" component={AddressScreen} />
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-            <Stack.Screen name="StateScreen" component={StateScreen} />
           </Stack.Navigator>
         </NavigationContainer>
+        <MercattoToast />
       </MercattoProvider>
     </SafeAreaProvider>
   );

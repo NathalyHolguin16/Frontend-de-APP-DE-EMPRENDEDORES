@@ -14,16 +14,56 @@ import {
   Screen,
   SectionHeader,
 } from "../../components/MercattoUI";
-import {
-  entrepreneurProfile,
-  entrepreneurStats,
-} from "../../data/mercattoData";
 import { useMercatto } from "../../context/MercattoContext";
 import { colors, radius, shadows, spacing, typography } from "../../theme/mercattoTheme";
 
 export function EntrepreneurDashboardScreen({ navigation }) {
-  const { logout, myStore, setMode } = useMercatto();
-  const [open, setOpen] = useState(true);
+  const { logout, myStore, setMode, sellerOrders, products } = useMercatto();
+  const storeProducts = products.filter(
+    (product) => product.businessId === myStore?.id,
+  );
+  const completionFields = [
+    myStore?.name,
+    myStore?.shortDescription,
+    myStore?.phone,
+    myStore?.slug,
+  ];
+  const completion = Math.round(
+    (completionFields.filter(Boolean).length / completionFields.length) * 100,
+  );
+  const stats = [
+    {
+      label: "Pedidos",
+      value: String(sellerOrders.length),
+      icon: "receipt-outline",
+    },
+    {
+      label: "En preparación",
+      value: String(
+        sellerOrders.filter((order) => order.status === "En preparación")
+          .length,
+      ),
+      icon: "time-outline",
+    },
+    {
+      label: "Productos activos",
+      value: String(storeProducts.filter((product) => product.isActive).length),
+      icon: "cube-outline",
+    },
+    {
+      label: "Stock bajo",
+      value: String(
+        storeProducts.filter((product) => product.stock <= 3).length,
+      ),
+      icon: "alert-circle-outline",
+    },
+  ];
+  const pendingOrders = sellerOrders.filter(
+    (order) => order.status === "Nuevo",
+  );
+  const lowStockProducts = storeProducts.filter(
+    (product) => product.stock <= 3,
+  );
   const handleLogout = () => {
     logout();
     goToLogin(navigation);
@@ -32,22 +72,20 @@ export function EntrepreneurDashboardScreen({ navigation }) {
     <Screen>
       <Card style={styles.heroAdmin}>
         <View style={styles.heroTop}>
-          <Avatar label="DO" size={68} />
+          <Avatar label={myStore?.logo || "M"} size={68} />
           <View style={{ flex: 1 }}>
-            <Text style={[typography.h2, { color: colors.white }]}>{myStore?.name || entrepreneurProfile.name}</Text>
-            <Text style={[typography.muted, { color: "#EDE6DB" }]}>Perfil completado al {entrepreneurProfile.completion}%</Text>
+            <Text style={[typography.h2, { color: colors.white }]}>
+              {myStore?.name || "Mi emprendimiento"}
+            </Text>
+            <Text style={[typography.muted, { color: "#EDE6DB" }]}>
+              Datos básicos completados al {completion}%
+            </Text>
           </View>
-          <Chip label={open ? "Abierto" : "Pausado"} tone={open ? "#E9F7EF" : "#FCEDEA"} />
+          <Chip label={myStore ? "Publicado" : "Incompleto"} tone={myStore ? "#E9F7EF" : "#FCEDEA"} />
         </View>
         <View style={styles.progressDark}>
-          <View style={[styles.progressOrange, { width: `${entrepreneurProfile.completion}%` }]} />
+          <View style={[styles.progressOrange, { width: `${completion}%` }]} />
         </View>
-        <PrimaryButton
-          title={open ? "Pausar tienda" : "Abrir tienda"}
-          icon={open ? "pause-circle-outline" : "play-circle-outline"}
-          variant="secondary"
-          onPress={() => setOpen((value) => !value)}
-        />
         <PrimaryButton
           title="Cerrar sesión"
           icon="log-out-outline"
@@ -56,7 +94,7 @@ export function EntrepreneurDashboardScreen({ navigation }) {
         />
       </Card>
       <View style={styles.statsGrid}>
-        {entrepreneurStats.map((stat) => (
+        {stats.map((stat) => (
           <Card key={stat.label} style={styles.statCard}>
             <Ionicons name={stat.icon} size={22} color={colors.primaryDark} />
             <Text style={styles.statValue}>{stat.value}</Text>
@@ -68,12 +106,12 @@ export function EntrepreneurDashboardScreen({ navigation }) {
       <View style={styles.quickGrid}>
         {[
           ["Agregar producto", "add-circle-outline", "SellerProducts"],
-          ["Crear promoción", "pricetag-outline", "SellerPromos"],
           ["Revisar pedidos", "receipt-outline", "SellerOrders"],
           ["Editar mi negocio", "storefront-outline", "SellerBusiness"],
-          ["Actualizar horarios", "time-outline", "SellerBusiness"],
-          ["Ver como comprador", "eye-outline", "preview"],
-        ].map(([label, icon, route]) => (
+          myStore
+            ? ["Ver como comprador", "eye-outline", "preview"]
+            : null,
+        ].filter(Boolean).map(([label, icon, route]) => (
           <Pressable
             key={label}
             style={styles.quickAction}
@@ -93,10 +131,23 @@ export function EntrepreneurDashboardScreen({ navigation }) {
       </View>
       <Card>
         <SectionHeader title="Alertas" />
-        <AlertLine icon="notifications-outline" text="Nuevo pedido MCT-1052 esperando confirmación." />
-        <AlertLine icon="cube-outline" text="Cheesecake de maracuyá tiene stock bajo." />
-        <AlertLine icon="star-outline" text="Tienes una nueva reseña de 5 estrellas." />
-        <AlertLine icon="pricetag-outline" text="La promo Combo dulce tarde finaliza en 48 horas." />
+        {pendingOrders.map((order) => (
+          <AlertLine
+            key={order.id}
+            icon="notifications-outline"
+            text={`El pedido ${order.id} espera confirmación.`}
+          />
+        ))}
+        {lowStockProducts.map((product) => (
+          <AlertLine
+            key={product.id}
+            icon="cube-outline"
+            text={`${product.name} tiene ${product.stock} unidades disponibles.`}
+          />
+        ))}
+        {!pendingOrders.length && !lowStockProducts.length ? (
+          <Text style={typography.muted}>No tienes alertas pendientes.</Text>
+        ) : null}
       </Card>
     </Screen>
   );
@@ -152,7 +203,16 @@ export function SellerOrdersScreen() {
               </>
             )}
           </View>
-          <PrimaryButton title="Ver ubicación o comprobante" variant="ghost" onPress={() => Alert.alert("Comprobante", "Vista simulada para imprimir o compartir.")} />
+          <PrimaryButton
+            title="Ver dirección"
+            variant="ghost"
+            onPress={() =>
+              Alert.alert(
+                "Dirección del pedido",
+                order.address || "El pedido no requiere dirección de entrega.",
+              )
+            }
+          />
         </Card>
       ))}
       {!sellerOrders.length ? (
@@ -208,7 +268,11 @@ export function SellerProductsScreen() {
       }
       setForm(emptyForm);
       setEditingId(null);
-      setMessage(editingId ? "Producto actualizado en Laravel." : "Producto creado en Laravel.");
+      setMessage(
+        editingId
+          ? "Producto actualizado correctamente."
+          : "Producto creado correctamente.",
+      );
     } catch (error) {
       setMessage(error?.message || "No pudimos guardar el producto.");
     } finally {
@@ -249,7 +313,9 @@ export function SellerProductsScreen() {
       <View style={styles.headerLine}>
         <View>
           <Text style={typography.h1}>Productos</Text>
-          <Text style={typography.muted}>Administra el catálogo y stock guardados en Laravel.</Text>
+          <Text style={typography.muted}>
+            Administra los productos publicados y su stock.
+          </Text>
         </View>
         <IconButton
           icon="add"
@@ -276,7 +342,11 @@ export function SellerProductsScreen() {
       </Card>
       {sellerProducts.map((product) => (
         <Card key={product.id}>
-          <ProductCard product={product} onPress={() => null} onAdd={() => null} />
+          <ProductCard
+            product={product}
+            onPress={() => editProduct(product)}
+            showAdd={false}
+          />
           <View style={styles.tagWrap}>
             <Chip label="Editar" onPress={() => editProduct(product)} />
             <Chip label={product.isActive ? "Pausar" : "Activar"} onPress={() => toggleProduct(product)} />
@@ -306,8 +376,8 @@ export function SellerPromosScreen() {
       <Text style={typography.h1}>Promociones</Text>
       <EmptyState
         icon="pricetag-outline"
-        title="Pendiente de backend"
-        message="Laravel todavía no ofrece endpoints para crear, editar o pausar promociones."
+        title="Sin promociones publicadas"
+        message="Las promociones estarán disponibles cuando el servicio de publicación sea habilitado."
       />
     </Screen>
   );
@@ -342,7 +412,7 @@ export function SellerBusinessScreen({ navigation }) {
     setMessage("");
     try {
       await saveStore(form);
-      setMessage("Información guardada en Laravel.");
+      setMessage("Información guardada correctamente.");
     } catch (error) {
       setMessage(error?.message || "No pudimos guardar el negocio.");
     } finally {
@@ -354,10 +424,20 @@ export function SellerBusinessScreen({ navigation }) {
     <Screen>
       <Text style={typography.h1}>Mi negocio</Text>
       <Text style={typography.muted}>
-        Esta plantilla editable define exactamente lo que verá el comprador en el perfil del emprendimiento.
+        Mantén actualizada la información pública de tu emprendimiento.
       </Text>
       {business ? <Card>
-        <Image source={{ uri: business.cover }} style={styles.coverPreview} resizeMode="cover" />
+        {business.cover ? (
+          <Image source={{ uri: business.cover }} style={styles.coverPreview} resizeMode="cover" />
+        ) : (
+          <View style={[styles.coverPreview, styles.coverPlaceholder]}>
+            <Ionicons
+              name="storefront-outline"
+              size={42}
+              color={colors.primaryDark}
+            />
+          </View>
+        )}
         <View style={styles.businessInline}>
           <Avatar label={business.logo} size={64} />
           <View style={{ flex: 1 }}>
@@ -395,36 +475,6 @@ export function SellerBusinessScreen({ navigation }) {
           }}
         />
       </Card>
-    </Screen>
-  );
-}
-
-export function SellerSettingsScreen({ navigation }) {
-  const { setMode, logout } = useMercatto();
-  return (
-    <Screen>
-      <Text style={typography.h1}>Configuración</Text>
-      <Card>
-        {[
-          "Datos del propietario",
-          "Seguridad",
-          "Métodos de pago",
-          "Datos bancarios",
-          "Notificaciones",
-          "Términos y condiciones",
-          "Políticas de privacidad",
-          "Ayuda y soporte",
-          "Pausar emprendimiento",
-          "Eliminar emprendimiento",
-        ].map((item) => (
-          <Pressable key={item} style={styles.menuRow}>
-            <Text style={styles.menuLabel}>{item}</Text>
-            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-          </Pressable>
-        ))}
-      </Card>
-      <PrimaryButton title="Cambiar al modo comprador" icon="swap-horizontal-outline" onPress={() => { setMode("buyer"); navigation.getParent()?.replace?.("BuyerTabs"); }} />
-      <PrimaryButton title="Cerrar sesión" variant="secondary" onPress={() => { logout(); goToLogin(navigation); }} />
     </Screen>
   );
 }
@@ -572,6 +622,10 @@ const styles = StyleSheet.create({
     height: 170,
     borderRadius: radius.lg,
     backgroundColor: colors.softOrange,
+  },
+  coverPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   businessInline: {
     flexDirection: "row",

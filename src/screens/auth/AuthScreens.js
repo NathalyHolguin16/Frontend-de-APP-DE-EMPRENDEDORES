@@ -12,8 +12,6 @@ import {
 } from "react-native";
 
 import AddressMap from "../../components/address-map";
-import BirthDateField from "../../components/birth-date-field";
-import GenderSelector from "../../components/gender-selector";
 import {
   Card,
   CheckboxRow,
@@ -29,7 +27,6 @@ import {
   cities,
   cityCoordinates,
   cityProvinces,
-  formSteps,
   matchMercattoCity,
 } from "../../data/mercattoData";
 import {
@@ -49,13 +46,13 @@ export function SplashScreen({ navigation }) {
     Animated.parallel([
       Animated.spring(scale, {
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: process.env.EXPO_OS !== "web",
         friction: 6,
       }),
       Animated.timing(opacity, {
         toValue: 1,
         duration: 520,
-        useNativeDriver: true,
+        useNativeDriver: process.env.EXPO_OS !== "web",
       }),
     ]).start();
     const id = setTimeout(() => navigation.replace("Login"), 1300);
@@ -119,8 +116,7 @@ export function LoginScreen({ navigation }) {
         form:
           error?.status === 422
             ? "El correo o la contraseña son incorrectos."
-            : error?.message ||
-              "No pudimos conectar con Mercatto. Intenta nuevamente.",
+            : error?.message || "No pudimos conectar con Mercatto. Intenta nuevamente.",
       });
     } finally {
       setIsSubmitting(false);
@@ -159,14 +155,7 @@ export function LoginScreen({ navigation }) {
             onRightPress={() => setShowPassword((value) => !value)}
             error={errors.password}
           />
-          {errors.form ? (
-            <Text selectable style={styles.errorHint}>
-              {errors.form}
-            </Text>
-          ) : null}
-          <Pressable onPress={() => navigation.navigate("ForgotPassword")}>
-            <Text style={styles.forgot}>¿Olvidaste tu contraseña?</Text>
-          </Pressable>
+          {errors.form ? <Text selectable style={styles.errorHint}>{errors.form}</Text> : null}
           <PrimaryButton
             title={isSubmitting ? "Iniciando sesión..." : "Iniciar sesión"}
             icon="log-in-outline"
@@ -182,40 +171,6 @@ export function LoginScreen({ navigation }) {
           </Pressable>
         </Card>
       </KeyboardAvoidingView>
-    </Screen>
-  );
-}
-
-export function ForgotPasswordScreen({ navigation }) {
-  const [value, setValue] = useState("");
-  const [sent, setSent] = useState(false);
-  return (
-    <Screen>
-      <Text style={typography.h1}>Recuperar contraseña</Text>
-      <Text style={typography.muted}>
-        Te enviaremos un código de seguridad a tu correo o celular registrado.
-      </Text>
-      <Card>
-        <Field
-          label="Correo o celular"
-          placeholder="maria@correo.com"
-          value={value}
-          onChangeText={setValue}
-        />
-        {sent ? (
-          <Text style={styles.success}>
-            Código enviado. Revisa tus mensajes.
-          </Text>
-        ) : null}
-        <PrimaryButton title="Enviar código" onPress={() => setSent(true)} />
-        <PrimaryButton
-          title="Introducir código"
-          variant="secondary"
-          onPress={() =>
-            navigation.navigate("Verification", { purpose: "password" })
-          }
-        />
-      </Card>
     </Screen>
   );
 }
@@ -265,8 +220,7 @@ export function RegisterRoleScreen({ navigation }) {
     <Screen>
       <Text style={typography.h1}>¿Cómo deseas utilizar Mercatto?</Text>
       <Text style={typography.muted}>
-        Elige un punto de partida. Más adelante podrás activar ambos perfiles en
-        tu cuenta.
+        Elige el uso principal con el que deseas comenzar.
       </Text>
       <RoleCard
         icon="basket-outline"
@@ -361,150 +315,139 @@ export function BuyerRegisterScreen({ navigation }) {
 }
 
 export function EntrepreneurRegisterScreen({ navigation }) {
-  const [step, setStep] = useState(0);
+  const { registerUser } = useMercatto();
   const [data, setData] = useState({});
-  const progress = ((step + 1) / formSteps.length) * 100;
-
-  const update = (key, value) =>
+  const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const update = (key, value) => {
     setData((current) => ({ ...current, [key]: value }));
-  const fieldsByStep = [
-    [
-      ["names", "Nombres"],
-      ["lastNames", "Apellidos"],
-      ["idNumber", "Número de cédula"],
-      ["birthDate", "Fecha de nacimiento"],
-      ["gender", "Género"],
-      ["phone", "Número celular"],
-      ["email", "Correo electrónico"],
-    ],
-    [
-      ["businessName", "Nombre del emprendimiento"],
-      ["category", "Categoría principal"],
-      ["subcategory", "Subcategoría"],
-      ["shortDescription", "Descripción corta"],
-      ["about", "Conoce más sobre nosotros"],
-      ["startYear", "Año de inicio opcional"],
-      ["businessPhone", "Contacto del negocio"],
-      ["businessEmail", "Correo del negocio"],
-      ["whatsapp", "Enlace de WhatsApp"],
-      ["socials", "Redes sociales"],
-      ["website", "Sitio web"],
-      ["baseCity", "Ciudad base"],
-      ["coverage", "Sectores o ciudades donde ofrece productos"],
-    ],
-    [
-      ["logo", "Logo del emprendimiento"],
-      ["cover", "Imagen de portada"],
-      ["starProduct", "Fotografía del producto estrella"],
-      ["gallery", "Fotos adicionales"],
-    ],
-    [
-      ["modality", "Modalidad del negocio"],
-      ["location", "Dirección exacta"],
-      ["schedule", "Horarios de atención"],
-      ["pickup", "Retiro, delivery o punto de encuentro"],
-    ],
-    [
-      ["delivery", "Zonas y costos de delivery"],
-      ["prepTime", "Tiempo de preparación"],
-      ["minOrder", "Pedido mínimo"],
-      ["freeFrom", "Envío gratis desde"],
-    ],
-    [
-      ["payments", "Métodos de pago"],
-      ["bank", "Datos bancarios privados"],
-      ["wallet", "Billetera digital"],
-    ],
-    [
-      ["changes", "Política de cambios"],
-      ["returns", "Política de devoluciones"],
-      ["cancel", "Política de cancelación"],
-      ["custom", "Condiciones para personalizados"],
-    ],
-    [["review", "Resumen final y notas para revisión"]],
-  ];
+    setErrors((current) => ({ ...current, [key]: "", form: "" }));
+  };
 
-  const finish = () => {
-    navigation.navigate("Verification", { profileType: "entrepreneur", data });
+  const submit = async () => {
+    const nextErrors = {};
+    if (!data.names?.trim()) nextErrors.names = "Ingresa tus nombres.";
+    if (!data.lastNames?.trim()) nextErrors.lastNames = "Ingresa tus apellidos.";
+    if (!data.email?.trim()) {
+      nextErrors.email = "Ingresa tu correo electrónico.";
+    } else if (!isEmail(data.email)) {
+      nextErrors.email = "Ingresa un correo electrónico válido.";
+    }
+    if (!validatePassword(data.password || "").valid) {
+      nextErrors.password = "Usa al menos 8 caracteres.";
+    }
+    if (!data.confirmPassword) {
+      nextErrors.confirmPassword = "Repite tu contraseña.";
+    } else if (data.password !== data.confirmPassword) {
+      nextErrors.confirmPassword = "Las contraseñas no coinciden.";
+    }
+    if (!data.businessName?.trim()) {
+      nextErrors.businessName = "Ingresa el nombre del emprendimiento.";
+    }
+    if (!data.businessPhone?.trim()) {
+      nextErrors.businessPhone = "Ingresa un teléfono de contacto.";
+    }
+    if (!data.legal) {
+      nextErrors.legal = "Debes aceptar los términos y la política de privacidad.";
+    }
+
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
+
+    setIsSubmitting(true);
+    try {
+      await registerUser({ profileType: "entrepreneur", data });
+      navigation.replace("EntrepreneurTabs");
+    } catch (error) {
+      setErrors({
+        form:
+          error?.message ||
+          "No pudimos crear la cuenta y el emprendimiento. Intenta nuevamente.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <Screen>
       <Text style={typography.h1}>Registro emprendedor</Text>
       <Text style={typography.muted}>
-        Paso {step + 1} de {formSteps.length}: {formSteps[step]}
+        Crea tu cuenta y registra los datos básicos de tu emprendimiento.
       </Text>
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressBar, { width: `${progress}%` }]} />
-      </View>
       <Card>
-        {fieldsByStep[step].map(([key, label]) => {
-          if (key === "birthDate") {
-            return (
-              <BirthDateField
-                key={key}
-                value={data.birthDate || ""}
-                onChange={(value) => update("birthDate", value)}
-              />
-            );
-          }
-          if (key === "gender") {
-            return (
-              <GenderSelector
-                key={key}
-                value={data.gender || ""}
-                onChange={(value) => update("gender", value)}
-              />
-            );
-          }
-          return (
-            <Field
-              key={key}
-              label={label}
-              placeholder={placeholderFor(label)}
-              value={data[key] || ""}
-              onChangeText={(value) => update(key, value)}
-              multiline={[
-                "about",
-                "coverage",
-                "delivery",
-                "changes",
-                "returns",
-                "custom",
-                "review",
-              ].includes(key)}
-            />
-          );
-        })}
-        {step === 0 ? (
-          <>
-            <PasswordPair data={data} update={update} />
-            <LegalChecks data={data} update={update} />
-          </>
+        <Field
+          label="Nombres"
+          placeholder="Tus nombres"
+          value={data.names || ""}
+          onChangeText={(value) => update("names", value)}
+          error={errors.names}
+        />
+        <Field
+          label="Apellidos"
+          placeholder="Tus apellidos"
+          value={data.lastNames || ""}
+          onChangeText={(value) => update("lastNames", value)}
+          error={errors.lastNames}
+        />
+        <Field
+          label="Correo electrónico"
+          placeholder="correo@ejemplo.com"
+          value={data.email || ""}
+          onChangeText={(value) => update("email", value)}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          error={errors.email}
+        />
+        <PasswordPair data={data} update={update} errors={errors} />
+      </Card>
+      <Card>
+        <Text style={typography.h3}>Tu emprendimiento</Text>
+        <Field
+          label="Nombre del emprendimiento"
+          placeholder="Nombre público del negocio"
+          value={data.businessName || ""}
+          onChangeText={(value) => update("businessName", value)}
+          error={errors.businessName}
+        />
+        <Field
+          label="Descripción"
+          placeholder="Describe brevemente lo que ofreces"
+          value={data.shortDescription || ""}
+          onChangeText={(value) => update("shortDescription", value)}
+          multiline
+        />
+        <Field
+          label="Teléfono de contacto"
+          placeholder="0991234567"
+          value={data.businessPhone || ""}
+          onChangeText={(value) => update("businessPhone", value)}
+          keyboardType="phone-pad"
+          error={errors.businessPhone}
+        />
+        <CheckboxRow
+          label="Acepto los términos y la política de privacidad de Mercatto."
+          checked={!!data.legal}
+          onPress={() => update("legal", !data.legal)}
+        />
+        {errors.legal ? (
+          <Text style={styles.errorHint}>{errors.legal}</Text>
         ) : null}
-        {step === 2 ? <ImageUploadMock /> : null}
-        {step === 3 ? <MultiSelectMock /> : null}
-        {step === 7 ? <ReviewPreview data={data} /> : null}
+        {errors.form ? (
+          <Text selectable style={styles.errorHint}>{errors.form}</Text>
+        ) : null}
+        <PrimaryButton
+          title={isSubmitting ? "Creando emprendimiento..." : "Crear emprendimiento"}
+          icon="storefront-outline"
+          onPress={submit}
+          disabled={isSubmitting}
+        />
       </Card>
       <View style={styles.navRow}>
         <PrimaryButton
-          title="Atrás"
+          title="Volver"
           variant="secondary"
-          onPress={() =>
-            step === 0 ? navigation.goBack() : setStep((value) => value - 1)
-          }
-          style={{ flex: 1 }}
-        />
-        <PrimaryButton
-          title={
-            step === formSteps.length - 1 ? "Enviar para revisión" : "Siguiente"
-          }
-          onPress={() =>
-            step === formSteps.length - 1
-              ? finish()
-              : setStep((value) => value + 1)
-          }
-          style={{ flex: 1 }}
+          onPress={() => navigation.goBack()}
         />
       </View>
     </Screen>
@@ -529,8 +472,7 @@ function RegisterForm({ profileType, navigation }) {
   const submit = async () => {
     const nextErrors = {};
     if (!data.names?.trim()) nextErrors.names = "Ingresa tus nombres.";
-    if (!data.lastNames?.trim())
-      nextErrors.lastNames = "Ingresa tus apellidos.";
+    if (!data.lastNames?.trim()) nextErrors.lastNames = "Ingresa tus apellidos.";
     if (!data.email?.trim()) {
       nextErrors.email = "Ingresa tu correo electrónico.";
     } else if (!isEmail(data.email)) {
@@ -545,8 +487,7 @@ function RegisterForm({ profileType, navigation }) {
       nextErrors.confirmPassword = "Las contraseñas no coinciden.";
     }
     if (!data.legal) {
-      nextErrors.legal =
-        "Debes aceptar los términos y la política de privacidad.";
+      nextErrors.legal = "Debes aceptar los términos y la política de privacidad.";
     }
 
     setErrors(nextErrors);
@@ -555,13 +496,10 @@ function RegisterForm({ profileType, navigation }) {
     setIsSubmitting(true);
     try {
       await registerUser({ profileType, data });
-      navigation.replace(
-        profileType === "entrepreneur" ? "EntrepreneurTabs" : "CitySelect",
-      );
+      navigation.replace(profileType === "entrepreneur" ? "EntrepreneurTabs" : "CitySelect");
     } catch (error) {
       setErrors({
-        form:
-          error?.message || "No pudimos crear la cuenta. Intenta nuevamente.",
+        form: error?.message || "No pudimos crear la cuenta. Intenta nuevamente.",
       });
     } finally {
       setIsSubmitting(false);
@@ -596,11 +534,7 @@ function RegisterForm({ profileType, navigation }) {
         {errors.legal ? (
           <Text style={styles.errorHint}>{errors.legal}</Text>
         ) : null}
-        {errors.form ? (
-          <Text selectable style={styles.errorHint}>
-            {errors.form}
-          </Text>
-        ) : null}
+        {errors.form ? <Text selectable style={styles.errorHint}>{errors.form}</Text> : null}
         <PrimaryButton
           title={isSubmitting ? "Creando cuenta..." : "Crear cuenta"}
           icon="person-add-outline"
@@ -648,169 +582,13 @@ function PasswordPair({ data, update, errors = {} }) {
   );
 }
 
-function LegalChecks({ data, update }) {
-  return (
-    <>
-      <CheckboxRow
-        label="Acepto los términos y condiciones de Mercatto."
-        checked={!!data.terms}
-        onPress={() => update("terms", !data.terms)}
-      />
-      <CheckboxRow
-        label="Acepto las políticas de privacidad y tratamiento de datos."
-        checked={!!data.privacy}
-        onPress={() => update("privacy", !data.privacy)}
-      />
-    </>
-  );
-}
-
-function ImageUploadMock() {
-  return (
-    <View style={styles.uploadGrid}>
-      {["Logo", "Portada", "Producto estrella", "Galería"].map(
-        (item, index) => (
-          <View key={item} style={styles.uploadBox}>
-            <Ionicons
-              name={index === 0 ? "image-outline" : "cloud-upload-outline"}
-              size={24}
-              color={colors.primaryDark}
-            />
-            <Text style={styles.uploadTitle}>{item}</Text>
-            <Text style={styles.uploadText}>
-              Previsualizar, recortar, reemplazar o eliminar.
-            </Text>
-            {index === 2 ? (
-              <Text style={styles.warning}>
-                Resolución sugerida: 1200 x 900 px
-              </Text>
-            ) : null}
-          </View>
-        ),
-      )}
-    </View>
-  );
-}
-
-function MultiSelectMock() {
-  const options = [
-    "Local físico",
-    "Solo ventas en línea",
-    "Bajo pedido",
-    "Delivery",
-    "Retiro en local",
-    "Punto de encuentro",
-  ];
-  const [selected, setSelected] = useState(["Delivery", "Retiro en local"]);
-  return (
-    <View style={styles.chipWrap}>
-      {options.map((option) => (
-        <Chip
-          key={option}
-          label={option}
-          selected={selected.includes(option)}
-          onPress={() =>
-            setSelected((current) =>
-              current.includes(option)
-                ? current.filter((item) => item !== option)
-                : [...current, option],
-            )
-          }
-        />
-      ))}
-    </View>
-  );
-}
-
-function ReviewPreview({ data }) {
-  const completed = Math.min(
-    96,
-    45 + Object.values(data).filter(Boolean).length * 4,
-  );
-  return (
-    <Card style={{ backgroundColor: colors.softOrange }}>
-      <Text style={typography.h3}>Vista previa del perfil</Text>
-      <Text style={typography.body}>
-        {data.businessName || "Nombre del emprendimiento"}
-      </Text>
-      <Text style={typography.muted}>
-        {data.shortDescription || "Descripción corta visible para compradores."}
-      </Text>
-      <Text style={styles.success}>Perfil completado al {completed}%</Text>
-      <PrimaryButton
-        title="Editar información del negocio"
-        variant="secondary"
-        onPress={() => null}
-      />
-    </Card>
-  );
-}
-
-export function VerificationScreen({ route, navigation }) {
-  const { registerUser } = useMercatto();
-  const { profileType = "buyer", data = {}, purpose } = route.params || {};
-  const [code, setCode] = useState("");
-  const [message, setMessage] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const verify = async () => {
-    if (code.length < 4) {
-      setMessage("Ingresa el código de seguridad de 4 dígitos.");
-      return;
-    }
-    if (purpose === "password") {
-      navigation.replace("Login");
-      return;
-    }
-    setIsSubmitting(true);
-    try {
-      await registerUser({ profileType, data });
-      navigation.replace(
-        profileType === "entrepreneur" ? "EntrepreneurTabs" : "CitySelect",
-      );
-    } catch (error) {
-      setMessage(
-        error?.message || "No pudimos crear la cuenta. Intenta nuevamente.",
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <Screen>
-      <Text style={typography.h1}>Verificación</Text>
-      <Text style={typography.muted}>
-        Enviamos un código de seguridad a tu celular o correo. Para esta maqueta
-        usa 1234.
-      </Text>
-      <Card>
-        <Field
-          label="Código"
-          placeholder="1234"
-          keyboardType="number-pad"
-          value={code}
-          onChangeText={setCode}
-        />
-        {message ? <Text style={styles.errorHint}>{message}</Text> : null}
-        <PrimaryButton
-          title={isSubmitting ? "Creando cuenta..." : "Verificar y continuar"}
-          icon="shield-checkmark-outline"
-          onPress={verify}
-          disabled={isSubmitting}
-        />
-        <PrimaryButton
-          title="Reenviar código"
-          variant="secondary"
-          onPress={() => setMessage("Código reenviado correctamente.")}
-        />
-      </Card>
-    </Screen>
-  );
-}
-
 export function CitySelectScreen({ route, navigation }) {
-  const { selectedCity, setSelectedCity, saveDeliveryAddress } = useMercatto();
+  const {
+    saveDeliveryAddress,
+    selectedCity,
+    setSelectedCity,
+    showNotice,
+  } = useMercatto();
   const [query, setQuery] = useState("");
   const [nextCity, setNextCity] = useState(selectedCity);
   const [coordinates, setCoordinates] = useState(
@@ -831,6 +609,7 @@ export function CitySelectScreen({ route, navigation }) {
     setCoordinates(cityCoordinates[city] || cityCoordinates.Manta);
     setAddressConfirmed(false);
     setDetectedAddress("");
+    setDetectedSector("");
     setMessage("");
   };
 
@@ -849,7 +628,7 @@ export function CitySelectScreen({ route, navigation }) {
         setDetectedSector(place.district || place.subregion || "");
         setAddressConfirmed(true);
         setMessage(
-          `Ubicación detectada en ${detectedCity}. Ya quedará como tu dirección de entrega.`,
+          `Ubicación detectada en ${detectedCity}. Puedes guardarla al continuar.`,
         );
       } else {
         setAddressConfirmed(false);
@@ -917,8 +696,10 @@ export function CitySelectScreen({ route, navigation }) {
           },
         });
       } catch {
-        // If the server sync fails, the person can still complete or fix the
-        // address later from "Configura tu dirección" — this isn't blocking.
+        showNotice(
+          "Seleccionamos tu ciudad, pero no pudimos guardar la dirección.",
+          "error",
+        );
       } finally {
         setIsSaving(false);
       }
@@ -1028,7 +809,8 @@ const styles = StyleSheet.create({
   },
   locationMessage: {
     color: colors.muted,
-    fontSize: 13,
+    fontWeight: "750",
+    lineHeight: 20,
   },
   splash: {
     backgroundColor: colors.primary,

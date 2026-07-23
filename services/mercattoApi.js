@@ -1,8 +1,12 @@
+import { toSpanishApiMessage } from "./apiErrors";
+
 const fallbackBaseUrl = "https://mercatto-back.onrender.com";
 const authTokenKey = "mercatto_auth_token";
 const profileCacheKey = "mercatto_profile_cache";
 let webSessionToken = null;
 let webProfileCache = null;
+const webTokenStorageKey = "mercatto_web_session_token";
+const webProfileStorageKey = "mercatto_web_profile_cache";
 
 export const mercattoApiUrl = (
   process.env.EXPO_PUBLIC_MERCATTO_API_URL || fallbackBaseUrl
@@ -28,11 +32,13 @@ async function fetchWithTimeout(url, opts = {}, timeoutMs = 8000) {
 }
 
 async function request(path, { method = "GET", body, token, timeoutMs } = {}) {
+  const isFormData =
+    typeof FormData !== "undefined" && body instanceof FormData;
   const headers = {
     Accept: "application/json",
   };
 
-  if (body !== undefined) {
+  if (body !== undefined && !isFormData) {
     headers["Content-Type"] = "application/json";
   }
 
@@ -46,7 +52,7 @@ async function request(path, { method = "GET", body, token, timeoutMs } = {}) {
         token = stored;
         headers.Authorization = `Bearer ${token}`;
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
   }
@@ -62,7 +68,12 @@ async function request(path, { method = "GET", body, token, timeoutMs } = {}) {
         {
           method,
           headers,
-          body: body === undefined ? undefined : JSON.stringify(body),
+          body:
+            body === undefined
+              ? undefined
+              : isFormData
+                ? body
+                : JSON.stringify(body),
         },
         timeoutMs || 8000,
       );
@@ -88,11 +99,11 @@ async function request(path, { method = "GET", body, token, timeoutMs } = {}) {
           typeof payload === "object" && payload?.errors
             ? Object.values(payload.errors).flat().find(Boolean)
             : null;
-        const error = new Error(
+        const rawMessage =
           typeof payload === "string"
             ? payload
-            : validationMessage || payload?.message || payload?.error || "No se pudo completar la solicitud.",
-        );
+            : validationMessage || payload?.message || payload?.error;
+        const error = new Error(toSpanishApiMessage(rawMessage, status));
         error.status = status;
         error.payload = payload;
         throw error;
@@ -113,7 +124,16 @@ async function request(path, { method = "GET", body, token, timeoutMs } = {}) {
         await sleep(500 * attempt);
         continue;
       }
-      throw err;
+      if (err?.status) throw err;
+
+      const networkError = new Error(
+        isAbort
+          ? "La solicitud tardó demasiado. Intenta nuevamente."
+          : "No pudimos conectar con Mercatto. Revisa tu conexión e intenta nuevamente.",
+      );
+      networkError.status = 0;
+      networkError.cause = err;
+      throw networkError;
     }
   }
 
@@ -123,6 +143,7 @@ async function request(path, { method = "GET", body, token, timeoutMs } = {}) {
 export async function saveToken(token) {
   if (process.env.EXPO_OS === "web") {
     webSessionToken = token;
+    globalThis.sessionStorage?.setItem(webTokenStorageKey, token);
     return;
   }
 
@@ -132,7 +153,11 @@ export async function saveToken(token) {
 
 export async function getStoredToken() {
   if (process.env.EXPO_OS === "web") {
-    return webSessionToken;
+    return (
+      webSessionToken ||
+      globalThis.sessionStorage?.getItem(webTokenStorageKey) ||
+      null
+    );
   }
 
   const SecureStore = await import("expo-secure-store");
@@ -142,6 +167,7 @@ export async function getStoredToken() {
 export async function clearStoredToken() {
   if (process.env.EXPO_OS === "web") {
     webSessionToken = null;
+    globalThis.sessionStorage?.removeItem(webTokenStorageKey);
     return;
   }
 
@@ -153,6 +179,7 @@ export async function saveCachedProfile(profile) {
   const serialized = JSON.stringify(profile);
   if (process.env.EXPO_OS === "web") {
     webProfileCache = serialized;
+    globalThis.localStorage?.setItem(webProfileStorageKey, serialized);
     return;
   }
 
@@ -162,7 +189,12 @@ export async function saveCachedProfile(profile) {
 
 export async function getCachedProfile() {
   let serialized = webProfileCache;
-  if (process.env.EXPO_OS !== "web") {
+  if (process.env.EXPO_OS === "web") {
+    serialized =
+      serialized ||
+      globalThis.localStorage?.getItem(webProfileStorageKey) ||
+      null;
+  } else {
     const SecureStore = await import("expo-secure-store");
     serialized = await SecureStore.getItemAsync(profileCacheKey);
   }

@@ -32,7 +32,7 @@ async function main() {
   console.log("Trying to register:", testUser.email);
   try {
     const reg = await post("/api/register", testUser);
-    console.log("Register response:", reg.status, reg.payload);
+    console.log("Register response:", reg.status, redactSecrets(reg.payload));
   } catch (err) {
     console.error("Register error:", err && err.message ? err.message : err);
   }
@@ -43,10 +43,18 @@ async function main() {
       email: testUser.email,
       password: testUser.password,
     });
-    console.log("Login response:", login.status, login.payload);
+    console.log("Login response:", login.status, redactSecrets(login.payload));
   } catch (err) {
     console.error("Login error:", err && err.message ? err.message : err);
   }
+}
+
+function redactSecrets(payload) {
+  if (!payload || typeof payload !== "object") return payload;
+  return {
+    ...payload,
+    token: payload.token ? "[REDACTED]" : payload.token,
+  };
 }
 
 main().catch((e) => {

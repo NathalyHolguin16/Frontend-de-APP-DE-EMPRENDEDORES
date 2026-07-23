@@ -31,7 +31,17 @@ yarn-error.*
 *.pem
 
 # local env files
-.env*.local
+.env
+.env.*
+!.env.example
+
+# Entregables que se conservan fuera del repositorio
+/docs/
+/capturas/
+/evidencias/
+/informes/
+*.apk
+*.aab
 
 # typescript
 *.tsbuildinfo

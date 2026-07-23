@@ -1,28 +1,31 @@
 {
   "expo": {
-    "name": "MiProyectoExpo",
-    "slug": "MiProyectoExpo",
+    "name": "Mercatto",
+    "slug": "mercatto",
     "version": "1.0.0",
+    "description": "Marketplace móvil para conectar compradores con emprendimientos locales.",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "miproyectoexpo",
-    "userInterfaceStyle": "automatic",
+    "scheme": "mercatto",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mercatto.app",
+      "buildNumber": "1"
     },
     "android": {
+      "package": "com.mercatto.app",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#FFA81A",
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -36,11 +39,11 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "imageWidth": 180,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#FFA81A",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#FFA81A"
           }
         }
       ],
@@ -48,7 +51,6 @@
       "@react-native-community/datetimepicker"
     ],
     "experiments": {
-      "typedRoutes": true,
       "reactCompiler": true
     }
   }

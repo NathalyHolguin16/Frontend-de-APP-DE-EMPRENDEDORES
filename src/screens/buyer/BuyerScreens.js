@@ -1,12 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -26,66 +27,23 @@ import {
   Meta,
   PrimaryButton,
   ProductCard,
-  PromoCard,
   Screen,
   SearchBar,
   SectionHeader,
 } from "../../components/MercattoUI";
-import { useMercatto } from "../../context/MercattoContext";
 import {
   cities,
   cityCoordinates,
   cityProvinces,
   matchMercattoCity,
-  promotions,
-  products as showcaseProducts,
 } from "../../data/mercattoData";
-import {
-  colors,
-  radius,
-  shadows,
-  spacing,
-  typography,
-} from "../../theme/mercattoTheme";
-
-const categoryShowcase = [
-  {
-    label: "Comida",
-    image:
-      "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=700&q=80",
-  },
-  {
-    label: "Postres",
-    image:
-      "https://images.unsplash.com/photo-1488477181946-6428a0291777?auto=format&fit=crop&w=700&q=80",
-  },
-  {
-    label: "Artesanías",
-    image:
-      "https://images.unsplash.com/photo-1528698827591-e19ccd7bc23d?auto=format&fit=crop&w=700&q=80",
-  },
-  {
-    label: "Moda",
-    image:
-      "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=700&q=80",
-  },
-  {
-    label: "Regalos",
-    image:
-      "https://images.unsplash.com/photo-1513201099705-a9746e1e201f?auto=format&fit=crop&w=700&q=80",
-  },
-  {
-    label: "Hogar",
-    image:
-      "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=700&q=80",
-  },
-];
+import { useMercatto } from "../../context/MercattoContext";
+import { colors, radius, shadows, spacing, typography } from "../../theme/mercattoTheme";
+import { isEmail } from "../../utils/validation";
 
 function getEditableProfileNames(user) {
   const explicitFirstName = String(user?.firstName || user?.names || "").trim();
-  const explicitLastName = String(
-    user?.lastName || user?.lastNames || "",
-  ).trim();
+  const explicitLastName = String(user?.lastName || user?.lastNames || "").trim();
   const fullName = String(user?.name || "").trim();
   const isGenericName = ["usuario mercatto", "nuevo usuario"].includes(
     fullName.toLowerCase(),
@@ -103,20 +61,28 @@ function getEditableProfileNames(user) {
 export function BuyerHomeScreen({ navigation }) {
   const {
     businesses,
-    catalogSource,
+    products,
     user,
     selectedCity,
     deliveryAddress,
     cart,
     favorites,
     toggleFavorite,
+    isCatalogLoading,
+    catalogError,
+    refreshCatalog,
   } = useMercatto();
   const [query, setQuery] = useState("");
-  const visiblePromotions = catalogSource === "demo" ? promotions : [];
+  const [activeCategory, setActiveCategory] = useState("Todas");
   const cartCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+  const availableCategories = [
+    "Todas",
+    ...new Set(businesses.map((business) => business.category).filter(Boolean)),
+  ];
   const filteredBusinesses = businesses.filter(
     (business) =>
       (!business.city || business.city === selectedCity) &&
+      (activeCategory === "Todas" || business.category === activeCategory) &&
       `${business.name} ${business.category} ${business.shortDescription}`
         .toLowerCase()
         .includes(query.toLowerCase()),
@@ -126,22 +92,11 @@ export function BuyerHomeScreen({ navigation }) {
     <Screen style={styles.homeSafe} contentStyle={styles.homeContent}>
       <View style={styles.homeTop}>
         <View style={styles.brandRow}>
-          <Pressable
-            onPress={() => navigation.navigate("CitySelect", { fromApp: true })}
-            style={styles.brandMark}
-          >
+          <Pressable onPress={() => navigation.navigate("CitySelect", { fromApp: true })} style={styles.brandMark}>
             <Text style={styles.brandText}>MERCATTO</Text>
             <Ionicons name="chevron-down" size={16} color={colors.white} />
           </Pressable>
           <View style={styles.headerActions}>
-            <IconButton
-              icon="notifications-outline"
-              color={colors.white}
-              onPress={() =>
-                navigation.navigate("StateScreen", { type: "notifications" })
-              }
-              style={styles.transparentIcon}
-            />
             <IconButton
               icon="cart-outline"
               badge={cartCount || null}
@@ -153,155 +108,114 @@ export function BuyerHomeScreen({ navigation }) {
         </View>
 
         <View style={styles.locationBlock}>
-          <Text style={styles.helloText}>
-            Hola, {user?.firstName || "Usuario"}
-          </Text>
-          <Pressable
-            onPress={() => navigation.navigate("Address")}
-            style={styles.locationPill}
-          >
+          <Text style={styles.helloText}>Hola, {user?.firstName || "Usuario"}</Text>
+          <Pressable onPress={() => navigation.navigate("Address")} style={styles.locationPill}>
             <Ionicons name="location-outline" size={17} color={colors.ink} />
             <Text numberOfLines={1} style={styles.locationText}>
-              {deliveryAddress
-                ? `${selectedCity} · ${deliveryAddress}`
-                : "Configura tu dirección"}
+              {deliveryAddress ? `${selectedCity} · ${deliveryAddress}` : "Configura tu dirección"}
             </Text>
             <Text style={styles.locationAction}>Cambiar</Text>
           </Pressable>
         </View>
       </View>
 
-      <HeroDealCard navigation={navigation} />
+      <HeroDealCard
+        navigation={navigation}
+        products={products}
+        businessCount={businesses.length}
+        city={selectedCity}
+      />
 
       <View style={styles.floatingSearch}>
-        <SearchBar
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Buscar emprendimientos o productos"
-        />
+        <SearchBar value={query} onChangeText={setQuery} placeholder="Buscar emprendimientos o productos" />
       </View>
 
-      <SectionHeader title="Categorías" action="Todas" />
-      <View style={styles.featureGrid}>
-        {categoryShowcase.slice(0, 2).map((category) => (
-          <VisualCategoryCard key={category.label} category={category} large />
-        ))}
-      </View>
+      <SectionHeader
+        title="Categorías"
+        action={activeCategory === "Todas" ? undefined : "Mostrar todas"}
+        onPress={() => setActiveCategory("Todas")}
+      />
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.horizontal}
       >
-        {categoryShowcase.slice(2).map((category) => (
-          <VisualCategoryCard key={category.label} category={category} />
+        {availableCategories.map((category) => (
+          <Chip
+            key={category}
+            label={category}
+            selected={activeCategory === category}
+            onPress={() => setActiveCategory(category)}
+          />
         ))}
       </ScrollView>
 
-      {visiblePromotions.length ? (
-        <SectionHeader
-          title="Promos exclusivas"
-          action="Ver promos"
-          onPress={() => navigation.navigate("Promos")}
+      <SectionHeader title="Emprendimientos disponibles" />
+      {isCatalogLoading ? (
+        <Card style={styles.loadingCard}>
+          <ActivityIndicator color={colors.primaryDark} size="large" />
+          <Text style={typography.muted}>Actualizando el catálogo...</Text>
+        </Card>
+      ) : null}
+      {!isCatalogLoading && catalogError ? (
+        <EmptyState
+          icon="cloud-offline-outline"
+          title="No pudimos cargar el catálogo"
+          message={catalogError}
+          action="Intentar nuevamente"
+          onPress={refreshCatalog}
         />
       ) : null}
-      {visiblePromotions.length ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontal}
-        >
-          {visiblePromotions.map((promo) => {
-            const business = businesses.find(
-              (item) => item.id === promo.businessId,
-            );
-            return (
-              <FeaturePromoCard
-                key={promo.id}
-                promo={promo}
-                businessName={business?.name}
-                onPress={() =>
-                  navigation.navigate("BusinessDetail", {
-                    businessId: promo.businessId,
-                  })
-                }
-              />
-            );
-          })}
-        </ScrollView>
-      ) : null}
-
-      {visiblePromotions.length ? (
-        <SectionHeader
-          title="Más ofertas para ti"
-          action="Promos"
-          onPress={() => navigation.navigate("Promos")}
-        />
-      ) : null}
-      {visiblePromotions.length ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontal}
-        >
-          {visiblePromotions.map((promo) => {
-            const business = businesses.find(
-              (item) => item.id === promo.businessId,
-            );
-            return (
-              <PromoCard
-                key={promo.id}
-                promo={promo}
-                businessName={business?.name}
-                onPress={() => navigation.navigate("Promos")}
-              />
-            );
-          })}
-        </ScrollView>
-      ) : null}
-      {["Emprendimientos destacados", "Cerca de ti", "Nuevos en Mercatto"].map(
-        (title, index) => (
-          <View key={title} style={{ gap: spacing.md }}>
-            <SectionHeader title={title} />
-            {filteredBusinesses.slice(index === 2 ? 1 : 0).map((business) => (
-              <BusinessCard
-                key={`${title}-${business.id}`}
-                business={business}
-                favorite={favorites.includes(business.id)}
-                onToggleFavorite={() => toggleFavorite(business.id)}
-                onPress={() =>
-                  navigation.navigate("BusinessDetail", {
-                    businessId: business.id,
-                  })
-                }
-              />
-            ))}
-          </View>
-        ),
-      )}
-      {!filteredBusinesses.length ? (
+      {!isCatalogLoading && !catalogError
+        ? filteredBusinesses.map((business) => (
+            <BusinessCard
+              key={business.id}
+              business={business}
+              favorite={favorites.includes(business.id)}
+              onToggleFavorite={() => toggleFavorite(business.id)}
+              onPress={() =>
+                navigation.navigate("BusinessDetail", {
+                  businessId: business.id,
+                })
+              }
+            />
+          ))
+        : null}
+      {!isCatalogLoading && !catalogError && !filteredBusinesses.length ? (
         <EmptyState
           icon="storefront-outline"
           title="Sin emprendimientos"
-          message="Aún no tenemos negocios activos en esta ciudad. Cambia de ciudad o vuelve pronto."
-          action="Cambiar ciudad"
-          onPress={() => navigation.navigate("CitySelect", { fromApp: true })}
+          message={
+            query || activeCategory !== "Todas"
+              ? "No encontramos emprendimientos con esos filtros."
+              : "Aún no existen emprendimientos activos para mostrar."
+          }
+          action={
+            query || activeCategory !== "Todas" ? "Limpiar filtros" : undefined
+          }
+          onPress={() => {
+            setQuery("");
+            setActiveCategory("Todas");
+          }}
         />
       ) : null}
     </Screen>
   );
 }
 
-function HeroDealCard({ navigation }) {
+function HeroDealCard({ navigation, products, businessCount, city }) {
+  const heroProducts = products.filter((product) => product.image).slice(0, 3);
   return (
-    <Pressable
-      onPress={() => navigation.navigate("Promos")}
-      style={({ pressed }) => [styles.heroDeal, pressed && styles.pressed]}
-    >
+    <Pressable onPress={() => navigation.navigate("Promos")} style={({ pressed }) => [styles.heroDeal, pressed && styles.pressed]}>
       <View style={styles.heroCopy}>
-        <Text style={styles.plusPill}>mercatto plus</Text>
-        <Text style={styles.heroEyebrow}>Compra local con beneficios</Text>
-        <Text style={styles.heroTitle}>Envíos gratis para comprar local</Text>
-        <Text style={styles.heroBadge}>Primer pedido con 20% OFF</Text>
+        <Text style={styles.plusPill}>mercatto local</Text>
+        <Text style={styles.heroEyebrow}>Emprendimientos de tu ciudad</Text>
+        <Text style={styles.heroTitle}>Compra local en {city}</Text>
+        <Text style={styles.heroBadge}>
+          {businessCount
+            ? `${businessCount} ${businessCount === 1 ? "tienda disponible" : "tiendas disponibles"}`
+            : "Catálogo en actualización"}
+        </Text>
       </View>
       <View style={styles.heroArt}>
         <View style={styles.heroDarkShape}>
@@ -309,141 +223,140 @@ function HeroDealCard({ navigation }) {
           <Text style={styles.heroPlusTwo}>+</Text>
           <Text style={styles.heroPlusThree}>+</Text>
         </View>
-        <Image
-          source={{ uri: showcaseProducts[0].image }}
-          style={[styles.heroProduct, styles.heroProductMain]}
-          resizeMode="cover"
-        />
-        <Image
-          source={{ uri: showcaseProducts[2].image }}
-          style={[styles.heroProduct, styles.heroProductSmall]}
-          resizeMode="cover"
-        />
-        <Image
-          source={{ uri: showcaseProducts[3].image }}
-          style={[styles.heroProduct, styles.heroProductTiny]}
-          resizeMode="cover"
-        />
+        {heroProducts[0]?.image ? (
+          <Image source={{ uri: heroProducts[0].image }} style={[styles.heroProduct, styles.heroProductMain]} resizeMode="cover" />
+        ) : null}
+        {heroProducts[1]?.image ? (
+          <Image source={{ uri: heroProducts[1].image }} style={[styles.heroProduct, styles.heroProductSmall]} resizeMode="cover" />
+        ) : null}
+        {heroProducts[2]?.image ? (
+          <Image source={{ uri: heroProducts[2].image }} style={[styles.heroProduct, styles.heroProductTiny]} resizeMode="cover" />
+        ) : null}
       </View>
       <View style={styles.heroPager} />
     </Pressable>
   );
 }
 
-function VisualCategoryCard({ category, large = false }) {
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.visualCategory,
-        large && styles.visualCategoryLarge,
-        pressed && styles.pressed,
-      ]}
-    >
-      <View style={styles.confettiOne} />
-      <View style={styles.confettiTwo} />
-      <View style={styles.confettiThree} />
-      <Image
-        source={{ uri: category.image }}
-        style={[
-          styles.visualCategoryImage,
-          large && styles.visualCategoryImageLarge,
-        ]}
-        resizeMode="cover"
-      />
-      <Text
-        style={[
-          styles.visualCategoryText,
-          large && styles.visualCategoryTextLarge,
-        ]}
-      >
-        {category.label}
-      </Text>
-    </Pressable>
-  );
-}
-
-function FeaturePromoCard({ promo, businessName, onPress }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.featurePromo, pressed && styles.pressed]}
-    >
-      <View style={styles.featurePromoCopy}>
-        <Text style={styles.featurePromoKicker}>Exclusivo para ti</Text>
-        <Text style={styles.featurePromoTitle}>
-          Hasta {promo.discount}% OFF
-        </Text>
-        <Text style={styles.featurePromoText}>en {businessName}</Text>
-      </View>
-      <Image
-        source={{ uri: promo.image }}
-        style={styles.featurePromoImage}
-        resizeMode="cover"
-      />
-      <View style={styles.featurePromoLogo}>
-        <Text style={styles.featurePromoLogoText}>M</Text>
-      </View>
-    </Pressable>
-  );
-}
-
 export function BusinessDetailScreen({ route, navigation }) {
-  const { businesses, products, favorites, toggleFavorite, addToCart } =
-    useMercatto();
+  const {
+    businesses,
+    products,
+    favorites,
+    toggleFavorite,
+    addToCart,
+    showNotice,
+  } = useMercatto();
   const business =
-    businesses.find((item) => item.id === route.params?.businessId) ||
-    businesses[0];
+    businesses.find(
+      (item) =>
+        item.id === route.params?.businessId ||
+        item.slug === route.params?.businessId,
+    ) || null;
   const businessProducts = products.filter(
-    (product) => product.businessId === business.id,
+    (product) => product.businessId === business?.id,
   );
-  const deliveryOptions = [
-    "Delivery",
-    "Retiro en local",
-    "Punto de encuentro",
-  ].filter((option) =>
-    business.modality
+  const deliveryOptions = ["Delivery", "Retiro en local", "Punto de encuentro"].filter((option) =>
+    (business?.modality || [])
       .join(" ")
       .toLowerCase()
       .includes(option.toLowerCase().split(" ")[0]),
   );
-  const [deliveryMode, setDeliveryMode] = useState(
-    deliveryOptions[0] || "Delivery",
+  const [deliveryMode, setDeliveryMode] = useState(deliveryOptions[0] || "Delivery");
+  const [recentlyAddedId, setRecentlyAddedId] = useState(null);
+  const addFeedbackTimer = useRef(null);
+
+  useEffect(
+    () => () => {
+      if (addFeedbackTimer.current) clearTimeout(addFeedbackTimer.current);
+    },
+    [],
   );
+
+  const markProductAsAdded = (productId) => {
+    setRecentlyAddedId(productId);
+    if (addFeedbackTimer.current) clearTimeout(addFeedbackTimer.current);
+    addFeedbackTimer.current = setTimeout(() => setRecentlyAddedId(null), 1400);
+  };
 
   const quickAdd = (product) => {
     const result = addToCart(product, 1);
     if (result.conflict) {
-      Alert.alert(
-        "Carrito de otro emprendimiento",
-        "Por ahora cada carrito pertenece a un solo negocio.",
-        [
-          { text: "Conservar carrito", style: "cancel" },
-          {
-            text: "Vaciar y agregar",
-            onPress: () => addToCart(product, 1, { replaceCart: true }),
+      Alert.alert("Carrito de otro emprendimiento", "Por ahora cada carrito pertenece a un solo negocio.", [
+        { text: "Conservar carrito", style: "cancel" },
+        {
+          text: "Vaciar y agregar",
+          onPress: () => {
+            addToCart(product, 1, { replaceCart: true });
+            markProductAsAdded(product.id);
           },
-        ],
-      );
+        },
+      ]);
+      return;
+    }
+    if (!result.duplicateSuppressed) markProductAsAdded(product.id);
+  };
+
+  const publicBaseUrl = process.env.EXPO_PUBLIC_MERCATTO_PUBLIC_URL?.replace(
+    /\/$/,
+    "",
+  );
+  const shareBusiness = async () => {
+    const url = `${publicBaseUrl}/tiendas/${business.id}`;
+    try {
+      await Share.share({
+        title: business.name,
+        message: `Conoce ${business.name} en Mercatto: ${url}`,
+        url,
+      });
+      showNotice("Enlace preparado para compartir.");
+    } catch {
+      showNotice("No pudimos compartir el emprendimiento.", "error");
     }
   };
+
+  if (!business) {
+    return (
+      <Screen>
+        <EmptyState
+          icon="storefront-outline"
+          title="Emprendimiento no disponible"
+          message="No encontramos este emprendimiento o ya no está publicado."
+          action="Volver al inicio"
+          onPress={() => navigation.replace("BuyerTabs")}
+        />
+      </Screen>
+    );
+  }
 
   return (
     <Screen contentStyle={{ paddingTop: 0 }}>
       <View style={styles.coverWrap}>
-        <Image
-          source={{ uri: business.cover }}
-          style={styles.coverImage}
-          resizeMode="cover"
-        />
+        {business.cover ? (
+          <Image
+            source={{ uri: business.cover }}
+            style={styles.coverImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.coverImage, styles.coverPlaceholder]}>
+            <Ionicons
+              name="storefront-outline"
+              size={52}
+              color={colors.primaryDark}
+            />
+          </View>
+        )}
         <View style={styles.coverActions}>
           <IconButton icon="arrow-back" onPress={() => navigation.goBack()} />
           <View style={{ flexDirection: "row", gap: spacing.sm }}>
-            <IconButton
-              icon="share-social-outline"
-              onPress={() =>
-                Alert.alert("Compartir", "Enlace copiado para esta maqueta.")
-              }
-            />
+            {publicBaseUrl ? (
+              <IconButton
+                icon="share-social-outline"
+                accessibilityLabel={`Compartir ${business.name}`}
+                onPress={shareBusiness}
+              />
+            ) : null}
             <IconButton
               icon={favorites.includes(business.id) ? "heart" : "heart-outline"}
               color={favorites.includes(business.id) ? colors.red : colors.ink}
@@ -457,28 +370,16 @@ export function BusinessDetailScreen({ route, navigation }) {
           <Avatar label={business.logo} size={62} />
           <View style={{ flex: 1 }}>
             <Text style={typography.h2}>{business.name}</Text>
-            <Text style={typography.muted}>
-              {business.category} · {business.subcategory}
-            </Text>
+            <Text style={typography.muted}>{business.category} · {business.subcategory}</Text>
           </View>
         </View>
         <View style={styles.metaRow}>
-          <Meta
-            icon="star"
-            label={`${business.rating} (${business.reviews} reseñas)`}
-            color={colors.primaryDark}
-          />
+          <Meta icon="star" label={`${business.rating} (${business.reviews} reseñas)`} color={colors.primaryDark} />
           <Meta icon="time-outline" label={business.schedule} />
-          <Meta
-            icon="radio-button-on-outline"
-            label={business.status}
-            color={business.status === "Abierto" ? colors.green : colors.red}
-          />
+          <Meta icon="radio-button-on-outline" label={business.status} color={business.status === "Abierto" ? colors.green : colors.red} />
         </View>
         <View style={styles.tagWrap}>
-          {business.modality.map((item) => (
-            <Chip key={item} label={item} tone={colors.softOrange} />
-          ))}
+          {business.modality.map((item) => <Chip key={item} label={item} tone={colors.softOrange} />)}
         </View>
         <Text style={typography.body}>{business.shortDescription}</Text>
         <Text style={typography.h3}>Conoce más sobre nosotros</Text>
@@ -488,54 +389,45 @@ export function BusinessDetailScreen({ route, navigation }) {
         <Text style={typography.h3}>Tipo de entrega</Text>
         <View style={styles.tagWrap}>
           {deliveryOptions.map((option) => (
-            <Chip
-              key={option}
-              label={option}
-              selected={deliveryMode === option}
-              onPress={() => setDeliveryMode(option)}
-            />
+            <Chip key={option} label={option} selected={deliveryMode === option} onPress={() => setDeliveryMode(option)} />
           ))}
         </View>
         <InfoLine label="Tiempo estimado" value={business.deliveryTime} />
         <InfoLine label="Preparación" value={business.preparationTime} />
+        <InfoLine label="Costo de envío" value={`$${business.deliveryCost.toFixed(2)}`} />
+        <InfoLine label="Pedido mínimo" value={`$${business.minimumOrder.toFixed(2)}`} />
+        <InfoLine label="Envío gratis desde" value={`$${business.freeShippingFrom.toFixed(2)}`} />
         <InfoLine
-          label="Costo de envío"
-          value={`$${business.deliveryCost.toFixed(2)}`}
+          label="Dirección"
+          value={business.address || "Disponible al coordinar el pedido"}
         />
-        <InfoLine
-          label="Pedido mínimo"
-          value={`$${business.minimumOrder.toFixed(2)}`}
-        />
-        <InfoLine
-          label="Envío gratis desde"
-          value={`$${business.freeShippingFrom.toFixed(2)}`}
-        />
-        <InfoLine label="Dirección" value={business.address} />
       </Card>
       <SectionHeader title="Productos" />
       {businessProducts.map((product) => (
         <ProductCard
           key={product.id}
           product={product}
-          onPress={() =>
-            navigation.navigate("ProductDetail", { productId: product.id })
-          }
+          onPress={() => navigation.navigate("ProductDetail", { productId: product.id })}
           onAdd={() => quickAdd(product)}
+          added={recentlyAddedId === product.id}
+          addDisabled={recentlyAddedId === product.id}
         />
       ))}
+      {!businessProducts.length ? (
+        <EmptyState
+          icon="cube-outline"
+          title="Sin productos disponibles"
+          message="Este emprendimiento todavía no tiene productos activos."
+        />
+      ) : null}
       <Card>
         <Text style={typography.h3}>Información y políticas</Text>
-        <Text style={typography.muted}>
-          Métodos de pago: {business.paymentMethods.join(", ")}.
-        </Text>
-        <Text style={typography.muted}>
-          Contacto: {business.contact} · {business.socials}
-        </Text>
-        {business.policies.map((policy) => (
-          <Text key={policy} style={typography.muted}>
-            • {policy}
-          </Text>
-        ))}
+        <Text style={typography.muted}>Métodos de pago: {business.paymentMethods.join(", ")}.</Text>
+        <Text style={typography.muted}>Contacto: {business.contact}</Text>
+        {business.socials ? (
+          <Text style={typography.muted}>Redes sociales: {business.socials}</Text>
+        ) : null}
+        {business.policies.map((policy) => <Text key={policy} style={typography.muted}>• {policy}</Text>)}
       </Card>
     </Screen>
   );
@@ -544,67 +436,91 @@ export function BusinessDetailScreen({ route, navigation }) {
 export function ProductDetailScreen({ route, navigation }) {
   const { addToCart, businesses, products } = useMercatto();
   const product =
-    products.find((item) => item.id === route.params?.productId) || products[0];
-  const business = businesses.find((item) => item.id === product.businessId);
+    products.find((item) => item.id === route.params?.productId) || null;
+  const business = businesses.find(
+    (item) => item.id === product?.businessId,
+  );
   const [quantity, setQuantity] = useState(1);
-  const [variant, setVariant] = useState(product.variants[0]);
-  const [complement, setComplement] = useState(product.complements[0]);
+  const [variant, setVariant] = useState(
+    product?.variants?.[0] || "Estándar",
+  );
+  const [complement, setComplement] = useState(
+    product?.complements?.[0] || "Sin complemento",
+  );
   const [notes, setNotes] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
 
   const submit = () => {
+    if (isAdding || !product) return;
+    setIsAdding(true);
     const result = addToCart(product, quantity, { variant, complement, notes });
     if (result.conflict) {
-      Alert.alert(
-        "Carrito de otro emprendimiento",
-        "¿Deseas vaciarlo y comenzar uno nuevo?",
-        [
-          { text: "No", style: "cancel" },
-          {
-            text: "Sí, vaciar",
-            onPress: () =>
-              addToCart(product, quantity, {
-                variant,
-                complement,
-                notes,
-                replaceCart: true,
-              }),
+      setIsAdding(false);
+      Alert.alert("Carrito de otro emprendimiento", "¿Deseas vaciarlo y comenzar uno nuevo?", [
+        { text: "No", style: "cancel" },
+        {
+          text: "Sí, vaciar",
+          onPress: () => {
+            addToCart(product, quantity, {
+              variant,
+              complement,
+              notes,
+              replaceCart: true,
+            });
+            navigation.navigate("Cart");
           },
-        ],
-      );
+        },
+      ]);
       return;
     }
     navigation.navigate("Cart");
   };
 
+  if (!product) {
+    return (
+      <Screen>
+        <EmptyState
+          icon="cube-outline"
+          title="Producto no disponible"
+          message="No encontramos este producto o ya no está publicado."
+          action="Volver"
+          onPress={() => navigation.goBack()}
+        />
+      </Screen>
+    );
+  }
+
   return (
     <Screen contentStyle={{ paddingTop: 0 }}>
-      <Image
-        source={{ uri: product.image }}
-        style={styles.productHero}
-        resizeMode="cover"
-      />
+      {product.image ? (
+        <Image
+          source={{ uri: product.image }}
+          style={styles.productHero}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={[styles.productHero, styles.coverPlaceholder]}>
+          <Ionicons
+            name="image-outline"
+            size={52}
+            color={colors.primaryDark}
+          />
+        </View>
+      )}
       <View style={styles.detailBack}>
         <IconButton icon="arrow-back" onPress={() => navigation.goBack()} />
       </View>
       <Card style={{ marginTop: -24 }}>
         <Text style={typography.h2}>{product.name}</Text>
-        <Text style={typography.muted}>
-          {business?.name} · {product.category}
-        </Text>
+        <Text style={typography.muted}>{business?.name} · {product.category}</Text>
         <View style={styles.priceRow}>
           <Text style={styles.bigPrice}>${product.price.toFixed(2)}</Text>
-          {product.oldPrice ? (
-            <Text style={styles.oldPrice}>${product.oldPrice.toFixed(2)}</Text>
-          ) : null}
-          {product.discount ? (
-            <Chip label={`${product.discount}% descuento`} tone="#E9F7EF" />
-          ) : null}
+          {product.oldPrice ? <Text style={styles.oldPrice}>${product.oldPrice.toFixed(2)}</Text> : null}
+          {product.discount ? <Chip label={`${product.discount}% descuento`} tone="#E9F7EF" /> : null}
         </View>
         <Text style={typography.body}>{product.fullDescription}</Text>
         <View style={styles.tagWrap}>
-          {product.badges.map((badge) => (
-            <Chip key={badge} label={badge} tone={colors.softOrange} />
-          ))}
+          {product.badges.map((badge) => <Chip key={badge} label={badge} tone={colors.softOrange} />)}
           <Chip label={product.availability} tone="#E9F7EF" />
           <Chip label={product.prepTime} />
         </View>
@@ -612,47 +528,26 @@ export function ProductDetailScreen({ route, navigation }) {
       <Card>
         <Text style={typography.h3}>Variaciones</Text>
         <View style={styles.tagWrap}>
-          {product.variants.map((item) => (
-            <Chip
-              key={item}
-              label={item}
-              selected={variant === item}
-              onPress={() => setVariant(item)}
-            />
-          ))}
+          {product.variants.map((item) => <Chip key={item} label={item} selected={variant === item} onPress={() => setVariant(item)} />)}
         </View>
         <Text style={typography.h3}>Complementos</Text>
         <View style={styles.tagWrap}>
-          {product.complements.map((item) => (
-            <Chip
-              key={item}
-              label={item}
-              selected={complement === item}
-              onPress={() => setComplement(item)}
-            />
-          ))}
+          {product.complements.map((item) => <Chip key={item} label={item} selected={complement === item} onPress={() => setComplement(item)} />)}
         </View>
-        <Field
-          label="Observaciones"
-          placeholder="Ej. sin maní, dedicatoria, color preferido"
-          multiline
-          value={notes}
-          onChangeText={setNotes}
-        />
+        <Field label="Observaciones" placeholder="Ej. sin maní, dedicatoria, color preferido" multiline value={notes} onChangeText={setNotes} />
         <View style={styles.quantityRow}>
-          <IconButton
-            icon="remove"
-            onPress={() => setQuantity((value) => Math.max(1, value - 1))}
-          />
+          <IconButton icon="remove" onPress={() => setQuantity((value) => Math.max(1, value - 1))} />
           <Text style={styles.quantityText}>{quantity}</Text>
-          <IconButton
-            icon="add"
-            onPress={() => setQuantity((value) => value + 1)}
-          />
+          <IconButton icon="add" onPress={() => setQuantity((value) => value + 1)} />
         </View>
         <PrimaryButton
-          title={`Agregar al carrito · $${(product.price * quantity).toFixed(2)}`}
+          title={
+            isAdding
+              ? "Agregando..."
+              : `Agregar al carrito · $${(product.price * quantity).toFixed(2)}`
+          }
           icon="cart-outline"
+          disabled={isAdding}
           onPress={submit}
         />
       </Card>
@@ -695,46 +590,38 @@ export function CartScreen({ navigation }) {
           <Text style={typography.h1}>Carrito</Text>
           <Text style={typography.muted}>{cartBusiness?.name}</Text>
         </View>
-        <IconButton
-          icon="trash-outline"
-          color={colors.red}
-          onPress={clearCart}
-        />
+        <IconButton icon="trash-outline" color={colors.red} onPress={clearCart} />
       </View>
       {cart.items.map((item) => (
         <Card key={item.product.id}>
           <View style={styles.cartItem}>
-            <Image
-              source={{ uri: item.product.image }}
-              style={styles.cartImage}
-              resizeMode="cover"
-            />
+            {item.product.image ? (
+              <Image
+                source={{ uri: item.product.image }}
+                style={styles.cartImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.cartImage, styles.coverPlaceholder]}>
+                <Ionicons
+                  name="image-outline"
+                  size={26}
+                  color={colors.primaryDark}
+                />
+              </View>
+            )}
             <View style={{ flex: 1, gap: 5 }}>
               <Text style={styles.productName}>{item.product.name}</Text>
-              <Text style={typography.muted}>
-                {item.variant} · {item.complement}
-              </Text>
-              {item.notes ? (
-                <Text style={typography.muted}>Obs: {item.notes}</Text>
-              ) : null}
+              <Text style={typography.muted}>{item.variant} · {item.complement}</Text>
+              {item.notes ? <Text style={typography.muted}>Obs: {item.notes}</Text> : null}
               <Text style={styles.price}>${item.product.price.toFixed(2)}</Text>
             </View>
           </View>
           <View style={styles.quantityRow}>
-            <IconButton
-              icon="remove"
-              onPress={() => updateCartQuantity(item.product.id, -1)}
-            />
+            <IconButton icon="remove" onPress={() => updateCartQuantity(item.product.id, -1)} />
             <Text style={styles.quantityText}>{item.quantity}</Text>
-            <IconButton
-              icon="add"
-              onPress={() => updateCartQuantity(item.product.id, 1)}
-            />
-            <PrimaryButton
-              title="Eliminar"
-              variant="ghost"
-              onPress={() => removeFromCart(item.product.id)}
-            />
+            <IconButton icon="add" onPress={() => updateCartQuantity(item.product.id, 1)} />
+            <PrimaryButton title="Eliminar" variant="ghost" onPress={() => removeFromCart(item.product.id)} />
           </View>
         </Card>
       ))}
@@ -742,42 +629,17 @@ export function CartScreen({ navigation }) {
         <Text style={typography.h3}>Entrega y pago</Text>
         <View style={styles.tagWrap}>
           {["Delivery", "Retiro en local", "Punto de encuentro"].map((mode) => (
-            <Chip
-              key={mode}
-              label={mode}
-              selected={cart.deliveryMode === mode}
-              onPress={() => setCartMeta({ deliveryMode: mode })}
-            />
+            <Chip key={mode} label={mode} selected={cart.deliveryMode === mode} onPress={() => setCartMeta({ deliveryMode: mode })} />
           ))}
         </View>
         <View style={styles.tagWrap}>
           {["Efectivo", "Transferencia", "Pago al retirar"].map((method) => (
-            <Chip
-              key={method}
-              label={method}
-              selected={cart.paymentMethod === method}
-              onPress={() => setCartMeta({ paymentMethod: method })}
-            />
+            <Chip key={method} label={method} selected={cart.paymentMethod === method} onPress={() => setCartMeta({ paymentMethod: method })} />
           ))}
         </View>
-        <Field
-          label="Cupón"
-          placeholder="Prueba MERCATTO10"
-          value={cart.coupon}
-          onChangeText={(value) => setCartMeta({ coupon: value })}
-        />
       </Card>
-      <OrderSummary
-        subtotal={cartSubtotal}
-        delivery={cartDelivery}
-        discount={cartDiscount}
-        total={cartTotal}
-      />
-      <PrimaryButton
-        title="Confirmar pedido"
-        icon="checkmark-circle-outline"
-        onPress={() => navigation.navigate("Checkout")}
-      />
+      <OrderSummary subtotal={cartSubtotal} delivery={cartDelivery} discount={cartDiscount} total={cartTotal} />
+      <PrimaryButton title="Confirmar pedido" icon="checkmark-circle-outline" onPress={() => navigation.navigate("Checkout")} />
     </Screen>
   );
 }
@@ -787,6 +649,8 @@ export function CheckoutScreen({ navigation }) {
     user,
     cartBusiness,
     deliveryAddress,
+    savedAddresses,
+    selectDeliveryAddress,
     cart,
     cartSubtotal,
     cartDelivery,
@@ -794,16 +658,12 @@ export function CheckoutScreen({ navigation }) {
     cartTotal,
     confirmOrder,
   } = useMercatto();
-  const [customerPhone, setCustomerPhone] = useState(
-    user?.phone === "Pendiente" ? "" : user?.phone || "",
-  );
+  const [customerPhone, setCustomerPhone] = useState(user?.phone === "Pendiente" ? "" : user?.phone || "");
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submit = async () => {
-    if (!deliveryAddress) {
-      setMessage(
-        "Configura una dirección de entrega antes de enviar el pedido.",
-      );
+    if (cart.deliveryMode === "Delivery" && !deliveryAddress) {
+      setMessage("Configura una dirección de entrega antes de enviar el pedido.");
       return;
     }
     if (!customerPhone.trim()) {
@@ -815,11 +675,9 @@ export function CheckoutScreen({ navigation }) {
     setMessage("");
     try {
       const order = await confirmOrder({ customerPhone });
-      navigation.replace("OrderConfirmation", { orderId: order.id });
+      navigation.replace("OrderConfirmation", { order });
     } catch (error) {
-      setMessage(
-        error?.message || "No pudimos enviar el pedido. Intenta nuevamente.",
-      );
+      setMessage(error?.message || "No pudimos enviar el pedido. Intenta nuevamente.");
     } finally {
       setIsSubmitting(false);
     }
@@ -829,7 +687,14 @@ export function CheckoutScreen({ navigation }) {
       <Text style={typography.h1}>Resumen del pedido</Text>
       <Card>
         <InfoLine label="Emprendimiento" value={cartBusiness?.name} />
-        <InfoLine label="Dirección" value={deliveryAddress} />
+        <InfoLine
+          label="Dirección"
+          value={
+            cart.deliveryMode === "Delivery"
+              ? deliveryAddress
+              : `Retiro en ${cartBusiness?.name || "el emprendimiento"}`
+          }
+        />
         <InfoLine label="Modalidad" value={cart.deliveryMode} />
         <InfoLine label="Método de pago" value={cart.paymentMethod} />
         <InfoLine label="Tiempo estimado" value={cartBusiness?.deliveryTime} />
@@ -841,123 +706,157 @@ export function CheckoutScreen({ navigation }) {
           onChangeText={setCustomerPhone}
         />
       </Card>
-      <OrderSummary
-        subtotal={cartSubtotal}
-        delivery={cartDelivery}
-        discount={cartDiscount}
-        total={cartTotal}
-      />
-      {message ? (
-        <Text selectable style={styles.addressMessage}>
-          {message}
-        </Text>
+      {cart.deliveryMode === "Delivery" ? (
+        <Card>
+          <Text style={typography.h3}>Dirección de entrega</Text>
+          {savedAddresses.length ? (
+            <View style={styles.addressChoiceList}>
+              {savedAddresses.map((address) => {
+                const label = formatSavedAddress(address);
+                return (
+                  <Chip
+                    key={address.id}
+                    label={label}
+                    selected={label === deliveryAddress}
+                    onPress={() => {
+                      selectDeliveryAddress(address);
+                      setMessage("");
+                    }}
+                  />
+                );
+              })}
+            </View>
+          ) : (
+            <Text style={typography.muted}>
+              Todavía no tienes direcciones guardadas.
+            </Text>
+          )}
+          <PrimaryButton
+            title="Agregar otra dirección"
+            icon="add-outline"
+            variant="secondary"
+            onPress={() => navigation.navigate("Address")}
+          />
+        </Card>
       ) : null}
+      <OrderSummary subtotal={cartSubtotal} delivery={cartDelivery} discount={cartDiscount} total={cartTotal} />
+      {message ? <Text selectable style={styles.addressMessage}>{message}</Text> : null}
       <PrimaryButton
         title={isSubmitting ? "Enviando pedido..." : "Enviar pedido"}
         icon="send-outline"
         onPress={submit}
         disabled={isSubmitting}
       />
-      <PrimaryButton
-        title="Volver al carrito"
-        variant="secondary"
-        onPress={() => navigation.goBack()}
-      />
+      <PrimaryButton title="Volver al carrito" variant="secondary" onPress={() => navigation.goBack()} />
     </Screen>
   );
 }
 
 export function OrderConfirmationScreen({ route, navigation }) {
+  const order = route.params?.order;
+  const showSuccess = route.params?.showSuccess !== false;
+  const shareReceipt = async () => {
+    if (!order) return;
+    try {
+      await Share.share({
+        title: `Pedido ${order.id}`,
+        message: formatOrderReceipt(order),
+      });
+    } catch {
+      Alert.alert(
+        "No pudimos compartir la nota",
+        "Intenta nuevamente en unos segundos.",
+      );
+    }
+  };
+
+  if (!order) {
+    return (
+      <Screen>
+        <EmptyState
+          icon="receipt-outline"
+          title="Pedido enviado"
+          message="El emprendimiento recibió tu pedido."
+          action="Ver mis pedidos"
+          onPress={() =>
+            navigation.replace("BuyerTabs", { screen: "Pedidos" })
+          }
+        />
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
-      <EmptyState
-        icon="checkmark-circle-outline"
-        title="Pedido confirmado"
-        message={`Tu pedido ${route.params?.orderId || ""} fue enviado al emprendimiento y aparecerá en Pedidos.`}
-        action="Ver mis pedidos"
-        onPress={() => navigation.replace("BuyerTabs", { screen: "Pedidos" })}
+      <Card style={styles.confirmationHero}>
+        <View style={styles.confirmationIcon}>
+          <Ionicons
+            name="checkmark"
+            size={34}
+            color={colors.white}
+          />
+        </View>
+        <Text style={[typography.h1, { textAlign: "center" }]}>
+          {showSuccess ? "Pedido enviado correctamente" : "Detalle del pedido"}
+        </Text>
+        <Text style={[typography.muted, { textAlign: "center" }]}>
+          {showSuccess
+            ? "El emprendimiento recibió tu solicitud y podrá actualizar su estado."
+            : `Estado actual: ${order.status}.`}
+        </Text>
+      </Card>
+      <Card>
+        <Text style={typography.h3}>Nota de venta</Text>
+        <InfoLine label="Número de pedido" value={order.id} />
+        <InfoLine label="Emprendimiento" value={order.businessName} />
+        <InfoLine label="Fecha" value={order.date} />
+        <InfoLine label="Productos" value={order.items.join(", ")} />
+        <InfoLine label="Modalidad" value={order.deliveryMode} />
+        <InfoLine label="Dirección" value={order.address} />
+        <InfoLine label="Pago" value={order.payment} />
+        <InfoLine label="Estado" value={order.status} />
+        <View style={styles.totalLine}>
+          <Text style={styles.totalLabel}>Total</Text>
+          <Text style={styles.totalValue}>${order.total.toFixed(2)}</Text>
+        </View>
+      </Card>
+      {showSuccess ? (
+        <PrimaryButton
+          title="Ver pedido"
+          icon="receipt-outline"
+          onPress={() =>
+            navigation.replace("BuyerTabs", { screen: "Pedidos" })
+          }
+        />
+      ) : null}
+      <PrimaryButton
+        title="Compartir nota de venta"
+        icon="share-social-outline"
+        variant="secondary"
+        onPress={shareReceipt}
+      />
+      <PrimaryButton
+        title="Volver al inicio"
+        variant="ghost"
+        onPress={() =>
+          navigation.replace("BuyerTabs", { screen: "Inicio" })
+        }
       />
     </Screen>
   );
 }
 
 export function PromosScreen({ navigation }) {
-  const { businesses, catalogSource } = useMercatto();
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("Todas");
-  const promoList = (catalogSource === "demo" ? promotions : []).filter(
-    (promo) => {
-      const business = businesses.find((item) => item.id === promo.businessId);
-      return (
-        (category === "Todas" || promo.category === category) &&
-        `${promo.name} ${business?.name}`
-          .toLowerCase()
-          .includes(query.toLowerCase())
-      );
-    },
-  );
   return (
     <Screen>
       <Text style={typography.h1}>Promos</Text>
-      <SearchBar
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Buscar promociones"
+      <EmptyState
+        icon="pricetag-outline"
+        title="Sin promociones publicadas"
+        message="Las promociones aparecerán aquí cuando los emprendimientos las publiquen."
+        action="Explorar emprendimientos"
+        onPress={() => navigation.navigate("Inicio")}
       />
-      <View style={styles.tagWrap}>
-        {["Todas", "Postres", "Artesanías", "Ropa", "Envío gratis"].map(
-          (item) => (
-            <Chip
-              key={item}
-              label={item}
-              selected={category === item}
-              onPress={() => setCategory(item)}
-            />
-          ),
-        )}
-      </View>
-      <SectionHeader title="Promociones destacadas" />
-      {promoList.map((promo) => {
-        const business = businesses.find(
-          (item) => item.id === promo.businessId,
-        );
-        return (
-          <Card key={promo.id}>
-            <Image
-              source={{ uri: promo.image }}
-              style={styles.promoWideImage}
-              resizeMode="cover"
-            />
-            <Text style={typography.h3}>{promo.name}</Text>
-            <Text style={typography.muted}>
-              {business?.name} · {promo.category}
-            </Text>
-            <View style={styles.priceRow}>
-              <Text style={styles.oldPrice}>${promo.oldPrice.toFixed(2)}</Text>
-              <Text style={styles.bigPrice}>${promo.price.toFixed(2)}</Text>
-              <Chip label={`${promo.discount}% OFF`} tone="#E9F7EF" />
-            </View>
-            <Text style={typography.muted}>
-              Vigencia: {promo.validity}. {promo.conditions}
-            </Text>
-            <PrimaryButton
-              title="Ver o comprar"
-              onPress={() =>
-                navigation.navigate("BusinessDetail", {
-                  businessId: promo.businessId,
-                })
-              }
-            />
-          </Card>
-        );
-      })}
-      {!promoList.length ? (
-        <EmptyState
-          icon="pricetag-outline"
-          title="Sin promociones"
-          message="No encontramos promociones con esos filtros."
-        />
-      ) : null}
     </Screen>
   );
 }
@@ -965,9 +864,7 @@ export function PromosScreen({ navigation }) {
 export function BuyerOrdersScreen({ navigation }) {
   const { orders } = useMercatto();
   const groups = {
-    "En curso": orders.filter(
-      (order) => !["Entregado", "Cancelado"].includes(order.status),
-    ),
+    "En curso": orders.filter((order) => !["Entregado", "Cancelado"].includes(order.status)),
     Completados: orders.filter((order) => order.status === "Entregado"),
     Cancelados: orders.filter((order) => order.status === "Cancelado"),
   };
@@ -977,20 +874,7 @@ export function BuyerOrdersScreen({ navigation }) {
       {Object.entries(groups).map(([title, list]) => (
         <View key={title} style={{ gap: spacing.md }}>
           <SectionHeader title={title} />
-          {list.length ? (
-            list.map((order) => (
-              <BuyerOrderCard
-                key={order.id}
-                order={order}
-                navigation={navigation}
-              />
-            ))
-          ) : (
-            <EmptyState
-              title={`Sin pedidos ${title.toLowerCase()}`}
-              message="Cuando tengas movimientos aparecerán aquí."
-            />
-          )}
+          {list.length ? list.map((order) => <BuyerOrderCard key={order.id} order={order} navigation={navigation} />) : <EmptyState title={`Sin pedidos ${title.toLowerCase()}`} message="Cuando tengas movimientos aparecerán aquí." />}
         </View>
       ))}
     </Screen>
@@ -1003,14 +887,9 @@ function BuyerOrderCard({ order, navigation }) {
       <View style={styles.headerLine}>
         <View>
           <Text style={typography.h3}>{order.id}</Text>
-          <Text style={typography.muted}>
-            {order.businessName} · {order.date}
-          </Text>
+          <Text style={typography.muted}>{order.businessName} · {order.date}</Text>
         </View>
-        <Chip
-          label={order.status}
-          tone={order.status === "Cancelado" ? "#FCEDEA" : colors.softOrange}
-        />
+        <Chip label={order.status} tone={order.status === "Cancelado" ? "#FCEDEA" : colors.softOrange} />
       </View>
       <Text style={typography.muted}>{order.items.join(", ")}</Text>
       <InfoLine label="Total" value={`$${order.total.toFixed(2)}`} />
@@ -1021,27 +900,27 @@ function BuyerOrderCard({ order, navigation }) {
           title="Ver detalle"
           variant="secondary"
           onPress={() =>
-            navigation.navigate("StateScreen", { type: "receipt" })
+            navigation.navigate("OrderConfirmation", {
+              order,
+              showSuccess: false,
+            })
           }
           style={{ flex: 1 }}
         />
-        {order.status === "Entregado" ? (
-          <PrimaryButton
-            title="Calificar"
-            onPress={() =>
-              navigation.navigate("StateScreen", { type: "reviews" })
-            }
-            style={{ flex: 1 }}
-          />
-        ) : null}
       </View>
     </Card>
   );
 }
 
 export function BuyerProfileScreen({ navigation }) {
-  const { user, selectedCity, deliveryAddress, logout, setMode } =
-    useMercatto();
+  const {
+    user,
+    selectedCity,
+    deliveryAddress,
+    logout,
+    myStore,
+    setMode,
+  } = useMercatto();
   const handleLogout = () => {
     logout();
     goToLogin(navigation);
@@ -1050,12 +929,6 @@ export function BuyerProfileScreen({ navigation }) {
     ["create-outline", "Editar información", "profile-edit"],
     ["location-outline", "Administrar direcciones", "address"],
     ["heart-outline", "Ver favoritos", "favorites"],
-    ["lock-closed-outline", "Cambiar contraseña", "password"],
-    ["notifications-outline", "Configurar notificaciones", "notifications"],
-    ["card-outline", "Administrar métodos de pago", "payments"],
-    ["document-text-outline", "Términos y condiciones", "terms"],
-    ["shield-checkmark-outline", "Políticas de privacidad", "privacy"],
-    ["help-circle-outline", "Ayuda y soporte", "support"],
   ];
   return (
     <Screen>
@@ -1063,9 +936,7 @@ export function BuyerProfileScreen({ navigation }) {
         <View style={styles.profileRow}>
           <Avatar label={user?.photo || "MZ"} size={76} />
           <View style={{ flex: 1 }}>
-            <Text style={typography.h2}>
-              {user?.name || "Usuario Mercatto"}
-            </Text>
+            <Text style={typography.h2}>{user?.name || "Usuario Mercatto"}</Text>
             <Text style={typography.muted}>{user?.email}</Text>
             <Text style={typography.muted}>{user?.phone}</Text>
           </View>
@@ -1073,10 +944,7 @@ export function BuyerProfileScreen({ navigation }) {
         <InfoLine label="Cédula" value={user?.idNumber} />
         <InfoLine label="Fecha de nacimiento" value={user?.birthDate} />
         <InfoLine label="Género" value={user?.gender} />
-        <InfoLine
-          label="Dirección principal"
-          value={deliveryAddress || "Sin configurar"}
-        />
+        <InfoLine label="Dirección principal" value={deliveryAddress || "Sin configurar"} />
         <InfoLine label="Ciudad seleccionada" value={selectedCity} />
       </Card>
       <Card>
@@ -1091,22 +959,18 @@ export function BuyerProfileScreen({ navigation }) {
                   ? "Favorites"
                   : type === "address"
                     ? "Address"
-                    : type === "profile-edit"
-                      ? "EditProfile"
-                      : "StateScreen",
-                { type },
+                    : "EditProfile",
               )
             }
           />
         ))}
         <MenuRow
           icon="storefront-outline"
-          label="Crear perfil de emprendedor"
-          onPress={() => navigation.navigate("EntrepreneurRegister")}
-        />
-        <MenuRow
-          icon="swap-horizontal-outline"
-          label="Cambiar a modo emprendedor"
+          label={
+            myStore
+              ? "Cambiar a modo emprendedor"
+              : "Crear perfil de emprendedor"
+          }
           onPress={() => {
             setMode("entrepreneur");
             navigation.getParent()?.replace?.("EntrepreneurTabs");
@@ -1143,18 +1007,10 @@ export function FavoritesScreen({ navigation }) {
           business={business}
           favorite
           onToggleFavorite={() => toggleFavorite(business.id)}
-          onPress={() =>
-            navigation.navigate("BusinessDetail", { businessId: business.id })
-          }
+          onPress={() => navigation.navigate("BusinessDetail", { businessId: business.id })}
         />
       ))}
-      {!list.length ? (
-        <EmptyState
-          icon="heart-outline"
-          title="Sin favoritos"
-          message="Guarda emprendimientos para encontrarlos rápido."
-        />
-      ) : null}
+      {!list.length ? <EmptyState icon="heart-outline" title="Sin favoritos" message="Guarda emprendimientos para encontrarlos rápido." /> : null}
     </Screen>
   );
 }
@@ -1162,28 +1018,52 @@ export function FavoritesScreen({ navigation }) {
 export function AddressScreen({ navigation }) {
   const {
     deliveryAddress,
+    removeDeliveryAddress,
     saveDeliveryAddress,
+    savedAddresses,
     selectedCity,
-    updateUserProfile,
     user,
   } = useMercatto();
   const [address, setAddress] = useState(deliveryAddress);
   const [city, setCity] = useState(selectedCity);
-  const [detectedSector, setDetectedSector] = useState(
-    user?.addressSector || "",
-  );
+  const [detectedSector, setDetectedSector] = useState(user?.addressSector || "");
   const [reference, setReference] = useState(user?.addressReference || "");
   const [message, setMessage] = useState("");
   const [coordinates, setCoordinates] = useState(
-    user?.addressCoordinates ||
-      cityCoordinates[selectedCity] ||
-      cityCoordinates.Manta,
+    user?.addressCoordinates || cityCoordinates[selectedCity] || cityCoordinates.Manta,
   );
   const [isLocating, setIsLocating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [locationConfirmed, setLocationConfirmed] = useState(
-    Boolean(deliveryAddress),
-  );
+  const [deletingAddressId, setDeletingAddressId] = useState(null);
+  const [locationConfirmed, setLocationConfirmed] = useState(Boolean(deliveryAddress));
+
+  const confirmDeleteAddress = (savedAddress) => {
+    Alert.alert(
+      "Eliminar dirección",
+      `¿Deseas eliminar “${savedAddress.alias || formatSavedAddress(savedAddress)}”?`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Eliminar",
+          style: "destructive",
+          onPress: async () => {
+            setDeletingAddressId(savedAddress.id);
+            setMessage("");
+            try {
+              await removeDeliveryAddress(savedAddress.id);
+            } catch (error) {
+              setMessage(
+                error?.message ||
+                  "No pudimos eliminar la dirección. Intenta nuevamente.",
+              );
+            } finally {
+              setDeletingAddressId(null);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const selectCity = (nextCity) => {
     if (nextCity === city) return;
@@ -1220,9 +1100,7 @@ export function AddressScreen({ navigation }) {
         applyGeocodedAddress(place);
       } else {
         setLocationConfirmed(false);
-        setMessage(
-          "No pudimos reconocer esa dirección. Prueba con otro punto cercano.",
-        );
+        setMessage("No pudimos reconocer esa dirección. Prueba con otro punto cercano.");
       }
     } catch {
       setLocationConfirmed(false);
@@ -1239,9 +1117,7 @@ export function AddressScreen({ navigation }) {
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (permission.status !== "granted") {
-        setMessage(
-          "Activa el permiso de ubicación para usar tu posición actual.",
-        );
+        setMessage("Activa el permiso de ubicación para usar tu posición actual.");
         return;
       }
 
@@ -1253,9 +1129,7 @@ export function AddressScreen({ navigation }) {
         longitude: current.coords.longitude,
       });
     } catch {
-      setMessage(
-        "No pudimos obtener tu ubicación. Puedes buscar la dirección manualmente.",
-      );
+      setMessage("No pudimos obtener tu ubicación. Puedes buscar la dirección manualmente.");
     } finally {
       setIsLocating(false);
     }
@@ -1274,21 +1148,15 @@ export function AddressScreen({ navigation }) {
       if (process.env.EXPO_OS === "android") {
         const permission = await Location.requestForegroundPermissionsAsync();
         if (permission.status !== "granted") {
-          setMessage(
-            "Android necesita el permiso de ubicación para buscar direcciones.",
-          );
+          setMessage("Android necesita el permiso de ubicación para buscar direcciones.");
           return;
         }
       }
 
-      const results = await Location.geocodeAsync(
-        `${address.trim()}, ${city}, Ecuador`,
-      );
+      const results = await Location.geocodeAsync(`${address.trim()}, ${city}, Ecuador`);
       if (!results.length) {
         setLocationConfirmed(false);
-        setMessage(
-          "No encontramos esa dirección. Revisa la calle y la ciudad.",
-        );
+        setMessage("No encontramos esa dirección. Revisa la calle y la ciudad.");
         return;
       }
 
@@ -1298,9 +1166,7 @@ export function AddressScreen({ navigation }) {
       };
       setCoordinates(nextCoordinates);
       setLocationConfirmed(true);
-      setMessage(
-        `Dirección encontrada en ${city}. Ajusta el pin si hace falta.`,
-      );
+      setMessage(`Dirección encontrada en ${city}. Ajusta el pin si hace falta.`);
     } catch {
       setLocationConfirmed(false);
       setMessage("No pudimos buscar la dirección ahora. Intenta nuevamente.");
@@ -1316,9 +1182,7 @@ export function AddressScreen({ navigation }) {
     }
 
     if (!locationConfirmed) {
-      setMessage(
-        "Busca la dirección o confirma el punto en el mapa antes de guardar.",
-      );
+      setMessage("Busca la dirección o confirma el punto en el mapa antes de guardar.");
       return;
     }
 
@@ -1349,26 +1213,13 @@ export function AddressScreen({ navigation }) {
       });
       navigation.goBack();
     } catch (error) {
-      if (!error?.status || error.status >= 500) {
-        updateUserProfile({ ...localAddress, addressSyncStatus: "pending" });
-        setMessage(
-          "Dirección guardada temporalmente. La sincronización con el servidor quedó pendiente.",
-        );
-        Alert.alert(
-          "Dirección guardada temporalmente",
-          "Mercatto no pudo sincronizarla con el servidor. Podrás usarla durante esta sesión.",
-          [{ text: "Entendido", onPress: () => navigation.goBack() }],
-        );
-        return;
-      }
-
       setMessage(
         error.status === 401
           ? "Tu sesión venció. Inicia sesión nuevamente para guardar la dirección."
           : error.status === 422
-            ? error.message ||
-              "Revisa los datos de la dirección e intenta nuevamente."
-            : "No pudimos guardar la dirección. Intenta nuevamente.",
+            ? error.message || "Revisa los datos de la dirección e intenta nuevamente."
+            : error?.message ||
+              "No pudimos guardar la dirección. Conservamos los datos en el formulario para que puedas intentarlo nuevamente.",
       );
     } finally {
       setIsSaving(false);
@@ -1377,8 +1228,43 @@ export function AddressScreen({ navigation }) {
 
   return (
     <Screen>
-      <Text style={typography.h1}>Dirección de entrega</Text>
+      <View style={styles.addressTitleRow}>
+        <IconButton
+          icon="arrow-back"
+          accessibilityLabel="Volver"
+          onPress={() => navigation.goBack()}
+        />
+        <Text style={[typography.h1, { flex: 1 }]}>Dirección de entrega</Text>
+      </View>
+      {savedAddresses.length ? (
+        <Card>
+          <Text style={typography.h3}>Direcciones guardadas</Text>
+          {savedAddresses.map((savedAddress) => (
+            <View key={savedAddress.id} style={styles.savedAddressRow}>
+              <View style={styles.savedAddressText}>
+                <Text style={styles.productName}>
+                  {savedAddress.alias || "Dirección"}
+                </Text>
+                <Text style={typography.muted}>
+                  {formatSavedAddress(savedAddress)}
+                </Text>
+              </View>
+              <IconButton
+                icon={
+                  deletingAddressId === savedAddress.id
+                    ? "hourglass-outline"
+                    : "trash-outline"
+                }
+                color={colors.red}
+                disabled={deletingAddressId === savedAddress.id}
+                onPress={() => confirmDeleteAddress(savedAddress)}
+              />
+            </View>
+          ))}
+        </Card>
+      ) : null}
       <Card>
+        <Text style={typography.h3}>Agregar dirección</Text>
         <Field
           label="Buscar dirección"
           value={address}
@@ -1409,39 +1295,19 @@ export function AddressScreen({ navigation }) {
         <View style={styles.mapHeader}>
           <View style={{ flex: 1 }}>
             <Text style={typography.h3}>Confirma el punto de entrega</Text>
-            <Text style={typography.muted}>
-              Mueve el mapa hasta dejar el pin sobre la entrada.
-            </Text>
+            <Text style={typography.muted}>Mueve el mapa hasta dejar el pin sobre la entrada.</Text>
           </View>
           {isLocating ? <ActivityIndicator color={colors.primaryDark} /> : null}
         </View>
-        <AddressMap
-          coordinates={coordinates}
-          onCoordinateChange={resolveMapPoint}
-        />
+        <AddressMap coordinates={coordinates} onCoordinateChange={resolveMapPoint} />
         <Text style={typography.h3}>Ciudad detectada</Text>
         <View style={styles.tagWrap}>
           {cities.slice(0, 8).map((item) => (
-            <Chip
-              key={item}
-              label={item}
-              selected={city === item}
-              onPress={() => selectCity(item)}
-            />
+            <Chip key={item} label={item} selected={city === item} onPress={() => selectCity(item)} />
           ))}
         </View>
-        <Field
-          label="Referencia (opcional)"
-          value={reference}
-          onChangeText={setReference}
-          placeholder="Casa, edificio o punto visible"
-          multiline
-        />
-        {message ? (
-          <Text selectable style={styles.addressMessage}>
-            {message}
-          </Text>
-        ) : null}
+        <Field label="Referencia (opcional)" value={reference} onChangeText={setReference} placeholder="Casa, edificio o punto visible" multiline />
+        {message ? <Text selectable style={styles.addressMessage}>{message}</Text> : null}
         <PrimaryButton
           title={isSaving ? "Guardando dirección..." : "Confirmar dirección"}
           icon="checkmark-circle-outline"
@@ -1454,35 +1320,18 @@ export function AddressScreen({ navigation }) {
 }
 
 export function EditProfileScreen({ navigation }) {
-  const {
-    user,
-    selectedCity,
-    deliveryAddress,
-    saveUserProfile,
-    updateUserProfile,
-  } = useMercatto();
+  const { user, saveUserProfile } = useMercatto();
   const initialNames = getEditableProfileNames(user);
   const [form, setForm] = useState({
     firstName: initialNames.firstName,
     lastName: initialNames.lastName,
     email: user?.email || "",
-    phone: user?.phone === "Pendiente" ? "" : user?.phone || "",
-    idNumber: user?.idNumber === "Pendiente" ? "" : user?.idNumber || "",
     birthDate: user?.birthDate === "Pendiente" ? "" : user?.birthDate || "",
     gender: user?.gender === "Pendiente" ? "" : user?.gender || "",
-    address: deliveryAddress || user?.address || "",
-    city: selectedCity || user?.city || "Manta",
   });
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const update = (key, value) =>
-    setForm((current) => ({ ...current, [key]: value }));
-  const selectProfileCity = (city) => {
-    setForm((current) =>
-      current.city === city ? current : { ...current, city, address: "" },
-    );
-    setMessage(`Ingresa una dirección principal válida en ${city}.`);
-  };
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
 
   const save = async () => {
     if (!form.firstName.trim() || !form.lastName.trim()) {
@@ -1490,8 +1339,8 @@ export function EditProfileScreen({ navigation }) {
       return;
     }
 
-    if (!form.address.trim()) {
-      setMessage(`Ingresa una dirección principal válida en ${form.city}.`);
+    if (!isEmail(form.email)) {
+      setMessage("Ingresa un correo electrónico válido.");
       return;
     }
 
@@ -1499,25 +1348,19 @@ export function EditProfileScreen({ navigation }) {
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim(),
       email: form.email.trim(),
-      phone: form.phone.trim() || "Pendiente",
-      idNumber: form.idNumber.trim() || "Pendiente",
       birthDate: form.birthDate.trim() || "Pendiente",
       gender: form.gender.trim() || "Pendiente",
-      address: form.address.trim(),
-      city: form.city,
     };
 
     setIsSaving(true);
     setMessage("");
     try {
       await saveUserProfile(profilePatch);
-      setMessage("Fecha de nacimiento y género guardados en Laravel.");
+      setMessage("Información guardada correctamente.");
     } catch (error) {
-      updateUserProfile(profilePatch);
       setMessage(
-        [404, 405].includes(error?.status)
-          ? "Cambios guardados en este dispositivo. Laravel todavía no habilita PATCH /api/me."
-          : "No pudimos sincronizar con Laravel. Los cambios quedaron guardados en este dispositivo.",
+        error?.message ||
+          "No pudimos guardar la información. Intenta nuevamente.",
       );
     } finally {
       setIsSaving(false);
@@ -1528,40 +1371,12 @@ export function EditProfileScreen({ navigation }) {
     <Screen>
       <Text style={typography.h1}>Editar información</Text>
       <Text style={typography.muted}>
-        Tus cambios se conservarán en este dispositivo mientras Laravel
-        incorpora la actualización del perfil.
+        Actualiza los datos disponibles de tu cuenta.
       </Text>
       <Card>
-        <Field
-          label="Nombres"
-          value={form.firstName}
-          onChangeText={(value) => update("firstName", value)}
-          placeholder="Ingresa tus nombres"
-        />
-        <Field
-          label="Apellidos"
-          value={form.lastName}
-          onChangeText={(value) => update("lastName", value)}
-          placeholder="Ingresa tus apellidos"
-        />
-        <Field
-          label="Correo electrónico"
-          value={form.email}
-          onChangeText={(value) => update("email", value)}
-          placeholder="correo@ejemplo.com"
-        />
-        <Field
-          label="Número celular"
-          value={form.phone}
-          onChangeText={(value) => update("phone", value)}
-          placeholder="0991234567"
-        />
-        <Field
-          label="Número de cédula"
-          value={form.idNumber}
-          onChangeText={(value) => update("idNumber", value)}
-          placeholder="1312345678"
-        />
+        <Field label="Nombres" value={form.firstName} onChangeText={(value) => update("firstName", value)} placeholder="Ingresa tus nombres" />
+        <Field label="Apellidos" value={form.lastName} onChangeText={(value) => update("lastName", value)} placeholder="Ingresa tus apellidos" />
+        <Field label="Correo electrónico" value={form.email} onChangeText={(value) => update("email", value)} placeholder="correo@ejemplo.com" />
         <BirthDateField
           value={form.birthDate}
           onChange={(value) => update("birthDate", value)}
@@ -1569,26 +1384,6 @@ export function EditProfileScreen({ navigation }) {
         <GenderSelector
           value={form.gender}
           onChange={(value) => update("gender", value)}
-        />
-      </Card>
-      <Card>
-        <Text style={typography.h3}>Ciudad principal</Text>
-        <View style={styles.tagWrap}>
-          {cities.slice(0, 8).map((city) => (
-            <Chip
-              key={city}
-              label={city}
-              selected={form.city === city}
-              onPress={() => selectProfileCity(city)}
-            />
-          ))}
-        </View>
-        <Field
-          label="Dirección principal"
-          value={form.address}
-          onChangeText={(value) => update("address", value)}
-          placeholder="Calle principal y referencia"
-          multiline
         />
         {message ? <Text style={styles.successText}>{message}</Text> : null}
         <PrimaryButton
@@ -1598,87 +1393,36 @@ export function EditProfileScreen({ navigation }) {
           onPress={save}
         />
         <PrimaryButton
-          title="Cancelar"
+          title="Administrar direcciones"
+          icon="location-outline"
           variant="secondary"
-          onPress={() => navigation.goBack()}
+          onPress={() => navigation.navigate("Address")}
         />
+        <PrimaryButton title="Cancelar" variant="secondary" onPress={() => navigation.goBack()} />
       </Card>
     </Screen>
   );
 }
 
-export function StateScreen({ route, navigation }) {
-  const map = {
-    notifications: [
-      "notifications-outline",
-      "Notificaciones",
-      "Nuevo pedido, reseñas, cambios de estado y avisos administrativos aparecerán aquí.",
-    ],
-    support: [
-      "help-buoy-outline",
-      "Centro de ayuda",
-      "Encuentra soporte para pedidos, pagos, entregas, cuenta y emprendimientos.",
-    ],
-    payments: [
-      "card-outline",
-      "Métodos de pago",
-      "Tarjetas, transferencias, billeteras digitales y pago contra entrega.",
-    ],
-    terms: [
-      "document-text-outline",
-      "Términos y condiciones",
-      "Documento legal simulado preparado para conectarse a contenido real.",
-    ],
-    privacy: [
-      "shield-checkmark-outline",
-      "Políticas de privacidad",
-      "Gestión responsable de datos personales y seguridad de cuenta.",
-    ],
-    reviews: [
-      "star-outline",
-      "Calificaciones y reseñas",
-      "Solo compradores con pedidos completados podrán calificar.",
-    ],
-    receipt: [
-      "receipt-outline",
-      "Comprobante",
-      "Comprobante visual del pedido, listo para compartir o imprimir más adelante.",
-    ],
-    password: [
-      "lock-closed-outline",
-      "Cambiar contraseña",
-      "Pantalla lista para conectar con verificación de seguridad.",
-    ],
-    "profile-edit": [
-      "create-outline",
-      "Editar información",
-      "Actualiza nombres, celular, correo, cédula y datos personales.",
-    ],
-  };
-  const [icon, title, message] = map[route.params?.type] || [
-    "construct-outline",
-    "Estado adicional",
-    "Pantalla preparada para crecer.",
-  ];
-  return (
-    <Screen>
-      <EmptyState
-        icon={icon}
-        title={title}
-        message={message}
-        action="Volver"
-        onPress={() => navigation.goBack()}
-      />
-      <Card>
-        <Text style={typography.h3}>Estados contemplados</Text>
-        <Text style={typography.muted}>
-          Error de conexión, sin ubicación, permiso de ubicación, skeleton
-          screens, cuenta en revisión, emprendimiento aprobado o rechazado,
-          perfil incompleto y contenido vacío.
-        </Text>
-      </Card>
-    </Screen>
-  );
+function formatSavedAddress(address) {
+  return [address.street_main, address.street_secondary]
+    .filter(Boolean)
+    .join(" y ");
+}
+
+function formatOrderReceipt(order) {
+  return [
+    "MERCATTO - NOTA DE VENTA",
+    `Pedido: ${order.id}`,
+    `Emprendimiento: ${order.businessName}`,
+    `Fecha: ${order.date}`,
+    `Productos: ${order.items.join(", ")}`,
+    `Modalidad: ${order.deliveryMode}`,
+    `Dirección: ${order.address}`,
+    `Pago: ${order.payment}`,
+    `Estado: ${order.status}`,
+    `Total: $${order.total.toFixed(2)}`,
+  ].join("\n");
 }
 
 function OrderSummary({ subtotal, delivery, discount, total }) {
@@ -1708,14 +1452,8 @@ function InfoLine({ label, value }) {
 function MenuRow({ icon, label, onPress, danger }) {
   return (
     <Pressable onPress={onPress} style={styles.menuRow}>
-      <Ionicons
-        name={icon}
-        size={21}
-        color={danger ? colors.red : colors.primaryDark}
-      />
-      <Text style={[styles.menuLabel, danger && { color: colors.red }]}>
-        {label}
-      </Text>
+      <Ionicons name={icon} size={21} color={danger ? colors.red : colors.primaryDark} />
+      <Text style={[styles.menuLabel, danger && { color: colors.red }]}>{label}</Text>
       <Ionicons name="chevron-forward" size={18} color={colors.muted} />
     </Pressable>
   );
@@ -1933,6 +1671,11 @@ const styles = StyleSheet.create({
   floatingSearch: {
     marginTop: -6,
   },
+  loadingCard: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 140,
+  },
   featureGrid: {
     flexDirection: "row",
     gap: spacing.md,
@@ -2107,6 +1850,10 @@ const styles = StyleSheet.create({
     height: "100%",
     backgroundColor: colors.softOrange,
   },
+  coverPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
   coverActions: {
     position: "absolute",
     left: spacing.md,
@@ -2220,6 +1967,33 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: spacing.sm,
   },
+  addressChoiceList: {
+    gap: spacing.sm,
+  },
+  savedAddressRow: {
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+    paddingVertical: spacing.sm,
+  },
+  savedAddressText: {
+    flex: 1,
+    gap: 3,
+  },
+  confirmationHero: {
+    alignItems: "center",
+  },
+  confirmationIcon: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: colors.green,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   totalLine: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2278,6 +2052,11 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   addressActions: {
+    gap: spacing.sm,
+  },
+  addressTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.sm,
   },
   addressActionButton: {

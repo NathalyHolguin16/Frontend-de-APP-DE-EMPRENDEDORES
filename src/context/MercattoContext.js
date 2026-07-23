@@ -47,6 +47,7 @@ import {
   saveStoredSellerOrders,
 } from "../../services/localPersistence";
 import { createStoreFormData } from "../../services/storeMedia";
+import { createProductFormData } from "../../services/productMedia";
 
 const MercattoContext = createContext(null);
 
@@ -713,7 +714,11 @@ export function MercattoProvider({ children }) {
 
   const addSellerProduct = async (payload) => {
     if (!myStore?.id) throw new Error("Primero debes registrar tu tienda.");
-    const response = await createProductRequest(myStore.id, normalizeProductPayload(payload));
+    const fields = normalizeProductPayload(payload);
+    const requestPayload = payload.image?.uri
+      ? createProductFormData(fields, payload.image)
+      : fields;
+    const response = await createProductRequest(myStore.id, requestPayload);
     const nextProduct = mapApiProduct(response, myStore);
     setProducts((current) => [nextProduct, ...current]);
     return nextProduct;
@@ -721,10 +726,14 @@ export function MercattoProvider({ children }) {
 
   const saveSellerProduct = async (productId, payload) => {
     if (!myStore?.id) throw new Error("Primero debes registrar tu tienda.");
+    const fields = normalizeProductPayload(payload);
+    const requestPayload = payload.image?.uri
+      ? createProductFormData(fields, payload.image, true)
+      : fields;
     const response = await updateProductRequest(
       myStore.id,
       productId,
-      normalizeProductPayload(payload),
+      requestPayload,
     );
     const nextProduct = mapApiProduct(response, myStore);
     setProducts((current) =>

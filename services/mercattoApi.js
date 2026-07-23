@@ -304,18 +304,24 @@ export async function getStoreProducts(storeId, page = 1) {
 }
 
 export async function createProduct(storeId, payload, token) {
+  const multipart =
+    typeof FormData !== "undefined" && payload instanceof FormData;
   return request(`/api/stores/${storeId}/products`, {
     method: "POST",
     body: payload,
     token,
+    timeoutMs: multipart ? 20000 : undefined,
   });
 }
 
 export async function updateProduct(storeId, productId, payload, token) {
+  const multipart =
+    typeof FormData !== "undefined" && payload instanceof FormData;
   return request(`/api/stores/${storeId}/products/${productId}`, {
-    method: "PUT",
+    method: multipart ? "POST" : "PUT",
     body: payload,
     token,
+    timeoutMs: multipart ? 20000 : undefined,
   });
 }
 

@@ -28,6 +28,7 @@ import {
   SectionHeader,
 } from "../../components/MercattoUI";
 import { useMercatto } from "../../context/MercattoContext";
+import { validateProductImage } from "../../../services/productMedia";
 import { validateStoreImage } from "../../../services/storeMedia";
 import { colors, radius, shadows, spacing, typography } from "../../theme/mercattoTheme";
 
@@ -390,6 +391,9 @@ export function SellerProductsScreen() {
   const emptyForm = { name: "", description: "", price: "", stock: "", isActive: true };
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
+  const [existingImage, setExistingImage] = useState(null);
+  const [imageAsset, setImageAsset] = useState(null);
+  const [isPickingImage, setIsPickingImage] = useState(false);
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const sellerProducts = products.filter(
@@ -398,6 +402,9 @@ export function SellerProductsScreen() {
   const updateForm = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const editProduct = (product) => {
     setEditingId(product.id);
+    setExistingImage(product.image || null);
+    setImageAsset(null);
+    setMessage("");
     setForm({
       name: product.name,
       description: product.description,
@@ -405,6 +412,47 @@ export function SellerProductsScreen() {
       stock: String(product.stock),
       isActive: product.isActive,
     });
+  };
+  const chooseProductImage = async () => {
+    setIsPickingImage(true);
+    setMessage("");
+    try {
+      if (Platform.OS !== "web") {
+        const permission =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          setMessage(
+            "Permite el acceso a tus fotos para elegir la imagen del producto.",
+          );
+          return;
+        }
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: Platform.OS === "web",
+      });
+      if (result.canceled) return;
+
+      const asset = result.assets[0];
+      const validationMessage = validateProductImage(asset);
+      if (validationMessage) {
+        setMessage(validationMessage);
+        return;
+      }
+      const previewUri =
+        Platform.OS === "web" && asset.base64
+          ? `data:${asset.mimeType || "image/jpeg"};base64,${asset.base64}`
+          : asset.uri;
+      setImageAsset({ ...asset, previewUri });
+    } catch {
+      setMessage("No pudimos abrir la galería. Intenta nuevamente.");
+    } finally {
+      setIsPickingImage(false);
+    }
   };
   const submit = async () => {
     if (!form.name.trim() || !form.description.trim() || !form.price || !form.stock) {
@@ -415,12 +463,20 @@ export function SellerProductsScreen() {
     setMessage("");
     try {
       if (editingId) {
-        await saveSellerProduct(editingId, form);
+        await saveSellerProduct(editingId, {
+          ...form,
+          image: imageAsset,
+        });
       } else {
-        await addSellerProduct(form);
+        await addSellerProduct({
+          ...form,
+          image: imageAsset,
+        });
       }
       setForm(emptyForm);
       setEditingId(null);
+      setExistingImage(null);
+      setImageAsset(null);
       setMessage(
         editingId
           ? "Producto actualizado correctamente."
@@ -477,11 +533,63 @@ export function SellerProductsScreen() {
           onPress={() => {
             setEditingId(null);
             setForm(emptyForm);
+            setExistingImage(null);
+            setImageAsset(null);
+            setMessage("");
           }}
         />
       </View>
       <Card style={styles.formCard}>
         <Text style={typography.h3}>{editingId ? "Editar producto" : "Nuevo producto"}</Text>
+        <View style={styles.productImageEditor}>
+          {imageAsset?.previewUri || existingImage ? (
+            <Image
+              source={{ uri: imageAsset?.previewUri || existingImage }}
+              style={styles.productImagePreview}
+              resizeMode="cover"
+            />
+          ) : (
+            <View
+              style={[
+                styles.productImagePreview,
+                styles.coverPlaceholder,
+              ]}
+            >
+              <Ionicons
+                name="image-outline"
+                size={42}
+                color={colors.primaryDark}
+              />
+            </View>
+          )}
+          <View style={styles.productImageActions}>
+            <PrimaryButton
+              title={
+                isPickingImage
+                  ? "Abriendo galería..."
+                  : imageAsset || existingImage
+                    ? "Cambiar foto"
+                    : "Elegir foto"
+              }
+              icon="camera-outline"
+              variant="secondary"
+              disabled={isPickingImage || isSaving}
+              onPress={chooseProductImage}
+              style={{ flex: 1 }}
+            />
+            {imageAsset ? (
+              <IconButton
+                icon="close"
+                color={colors.red}
+                accessibilityLabel="Descartar foto seleccionada"
+                onPress={() => setImageAsset(null)}
+              />
+            ) : null}
+          </View>
+          <Text style={typography.muted}>
+            Imagen JPG, PNG o WebP de máximo 2 MB.
+          </Text>
+        </View>
         <Field label="Nombre" value={form.name} onChangeText={(value) => updateForm("name", value)} />
         <Field label="Descripción" value={form.description} onChangeText={(value) => updateForm("description", value)} multiline />
         <Field label="Precio" keyboardType="decimal-pad" value={form.price} onChangeText={(value) => updateForm("price", value)} />
@@ -919,6 +1027,21 @@ const styles = StyleSheet.create({
   coverPlaceholder: {
     alignItems: "center",
     justifyContent: "center",
+  },
+  productImageEditor: {
+    gap: spacing.sm,
+  },
+  productImagePreview: {
+    width: 152,
+    height: 152,
+    alignSelf: "center",
+    borderRadius: radius.lg,
+    backgroundColor: colors.white,
+  },
+  productImageActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
   businessInline: {
     flexDirection: "row",

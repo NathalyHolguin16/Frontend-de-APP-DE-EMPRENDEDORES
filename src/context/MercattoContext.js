@@ -21,8 +21,9 @@ import {
   deleteProduct as deleteProductRequest,
   getAddresses,
   getCachedProfile,
-  getMyOrders,
   getMyStore,
+  getOrder,
+  getStoredToken,
   getStoreProducts,
   getStoreOrders,
   getStores,
@@ -40,8 +41,10 @@ import {
   getAccountStorageId,
   loadStoredCart,
   loadStoredOrders,
+  loadStoredSellerOrders,
   saveStoredCart,
   saveStoredOrders,
+  saveStoredSellerOrders,
 } from "../../services/localPersistence";
 
 const MercattoContext = createContext(null);
@@ -134,6 +137,11 @@ export function MercattoProvider({ children }) {
   }, [orders, user]);
 
   useEffect(() => {
+    if (!getAccountStorageId(user)) return;
+    saveStoredSellerOrders(user, sellerOrders).catch(() => {});
+  }, [sellerOrders, user]);
+
+  useEffect(() => {
     if (!products.length || !businesses.length) return;
     setOrders((current) =>
       current.map((order) =>
@@ -147,6 +155,36 @@ export function MercattoProvider({ children }) {
     );
   }, [businesses, products]);
 
+  const syncBuyerOrderRecords = async (sourceOrders, token) => {
+    const results = await Promise.allSettled(
+      sourceOrders.map((order) =>
+        order.businessId
+          ? getOrder(order.businessId, order.id, token)
+          : Promise.reject(new Error("Pedido sin tienda asociada.")),
+      ),
+    );
+
+    return results.map((result, index) => {
+      const storedOrder = sourceOrders[index];
+      if (result.status === "rejected") return storedOrder;
+
+      const store =
+        businesses.find(
+          (business) => business.id === storedOrder.businessId,
+        ) || {
+          id: storedOrder.businessId,
+          name: storedOrder.businessName,
+        };
+      return mapApiOrder(result.value, {
+        store,
+        deliveryMode: storedOrder.deliveryMode,
+        paymentMethod: storedOrder.payment,
+        catalogProducts: products,
+        catalogBusinesses: businesses,
+      });
+    });
+  };
+
   const login = async ({ identifier, password }) => {
     const response = await loginUser({
       email: identifier.trim().toLowerCase(),
@@ -158,12 +196,10 @@ export function MercattoProvider({ children }) {
     setOrdersError("");
     setSellerOrdersError("");
 
-    const [addressResult, storeResult, buyerOrderResult] =
-      await Promise.allSettled([
-        getAddresses(response.token),
-        getMyStore(response.token),
-        getAllPages((page) => getMyOrders(page, response.token)),
-      ]);
+    const [addressResult, storeResult] = await Promise.allSettled([
+      getAddresses(response.token),
+      getMyStore(response.token),
+    ]);
     const addresses =
       addressResult.status === "fulfilled"
         ? addressResult.value?.data || []
@@ -192,44 +228,34 @@ export function MercattoProvider({ children }) {
       profiles: apiStore ? ["buyer", "entrepreneur"] : ["buyer"],
       ...mapApiAddress(defaultAddress),
     });
-    const [storedCart, storedOrders] = await Promise.all([
+    const [storedCart, storedOrders, storedSellerOrders] = await Promise.all([
       loadStoredCart(nextUser),
       loadStoredOrders(nextUser),
+      loadStoredSellerOrders(nextUser),
     ]);
     const mappedStore = apiStore ? mapApiStore(apiStore) : null;
-    const mappedBuyerOrders =
-      buyerOrderResult.status === "fulfilled"
-        ? buyerOrderResult.value.map((order) =>
-            mapApiOrder(order, {
-              catalogProducts: products,
-              catalogBusinesses: businesses,
-            }),
-          )
-        : storedOrders;
-    if (buyerOrderResult.status === "rejected") {
-      setOrdersError(
-        storedOrders.length
-          ? "No pudimos actualizar tus pedidos. Mostramos el último respaldo guardado."
-          : buyerOrderResult.reason?.message ||
-              "No pudimos cargar tus pedidos.",
-      );
-    }
-
+    const mappedBuyerOrders = await syncBuyerOrderRecords(
+      storedOrders,
+      response.token,
+    );
+    const remoteSellerOrders = apiSellerOrders.map((order) =>
+      mapApiOrder(order, {
+        store: mappedStore,
+        catalogProducts: products,
+        catalogBusinesses: businesses,
+      }),
+    );
+    const mappedSellerOrders = mergeOrdersById(
+      remoteSellerOrders,
+      storedSellerOrders,
+    );
     cartOwnerRef.current = getAccountStorageId(nextUser);
     setCart(normalizeStoredCart(storedCart));
     setUser(nextUser);
     setSavedAddresses(addresses);
     setMyStore(mappedStore);
     setOrders(mappedBuyerOrders);
-    setSellerOrders(
-      apiSellerOrders.map((order) =>
-        mapApiOrder(order, {
-          store: mappedStore,
-          catalogProducts: products,
-          catalogBusinesses: businesses,
-        }),
-      ),
-    );
+    setSellerOrders(mappedSellerOrders);
     setIsOrdersLoading(false);
     setIsSellerOrdersLoading(false);
     if (nextUser.city) {
@@ -405,12 +431,15 @@ export function MercattoProvider({ children }) {
   };
 
   const logout = async () => {
+    const activeToken = await getStoredToken().catch(() => null);
     if (user) {
       await Promise.allSettled([
         saveStoredCart(user, cart),
         saveStoredOrders(user, orders),
+        saveStoredSellerOrders(user, sellerOrders),
       ]);
     }
+    await clearStoredToken();
     cartOwnerRef.current = null;
     setUser(null);
     setSavedAddresses([]);
@@ -421,13 +450,9 @@ export function MercattoProvider({ children }) {
     setSellerOrdersError("");
     setMode("buyer");
     setCart(createEmptyCart());
-    try {
-      await logoutUser();
-    } catch {
-      // The local session must still close if the API is unavailable.
-    } finally {
-      await clearStoredToken();
-    }
+    logoutUser(activeToken).catch(() => {
+      // The local session is already closed if the API is unavailable.
+    });
   };
 
   const toggleFavorite = (businessId) => {
@@ -528,13 +553,7 @@ export function MercattoProvider({ children }) {
     if (!silent) setIsOrdersLoading(true);
     setOrdersError("");
     try {
-      const apiOrders = await getAllPages((page) => getMyOrders(page));
-      const nextOrders = apiOrders.map((order) =>
-        mapApiOrder(order, {
-          catalogProducts: products,
-          catalogBusinesses: businesses,
-        }),
-      );
+      const nextOrders = await syncBuyerOrderRecords(orders);
       setOrders(nextOrders);
       if (user) await saveStoredOrders(user, nextOrders);
       return nextOrders;
@@ -564,8 +583,10 @@ export function MercattoProvider({ children }) {
           catalogBusinesses: businesses,
         }),
       );
-      setSellerOrders(nextOrders);
-      return nextOrders;
+      const mergedOrders = mergeOrdersById(nextOrders, sellerOrders);
+      setSellerOrders(mergedOrders);
+      if (user) await saveStoredSellerOrders(user, mergedOrders);
+      return mergedOrders;
     } catch (error) {
       setSellerOrdersError(
         error?.message || "No pudimos actualizar los pedidos del negocio.",
@@ -975,6 +996,16 @@ function mapApiOrder(order, extras = {}) {
     apiItems,
     isBackendEntity: true,
   };
+}
+
+function mergeOrdersById(primaryOrders = [], fallbackOrders = []) {
+  const seenIds = new Set();
+  return [...primaryOrders, ...fallbackOrders].filter((order) => {
+    const id = order?.id;
+    if (!id || seenIds.has(id)) return false;
+    seenIds.add(id);
+    return true;
+  });
 }
 
 function createEmptyCart() {

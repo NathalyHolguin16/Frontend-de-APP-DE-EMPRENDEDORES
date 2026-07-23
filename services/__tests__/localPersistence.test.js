@@ -4,8 +4,10 @@ import {
   getAccountStorageId,
   loadStoredCart,
   loadStoredOrders,
+  loadStoredSellerOrders,
   saveStoredCart,
   saveStoredOrders,
+  saveStoredSellerOrders,
 } from "../localPersistence";
 
 describe("localPersistence", () => {
@@ -32,5 +34,19 @@ describe("localPersistence", () => {
 
     expect(getAccountStorageId(account)).toBe("luis@example.com");
     await expect(loadStoredOrders(account)).resolves.toEqual(orders);
+  });
+
+  it("stores seller orders separately from buyer orders", async () => {
+    const account = { id: "seller-id" };
+    const buyerOrders = [{ id: "buyer-order" }];
+    const sellerOrders = [{ id: "seller-order" }];
+
+    await saveStoredOrders(account, buyerOrders);
+    await saveStoredSellerOrders(account, sellerOrders);
+
+    await expect(loadStoredOrders(account)).resolves.toEqual(buyerOrders);
+    await expect(loadStoredSellerOrders(account)).resolves.toEqual(
+      sellerOrders,
+    );
   });
 });

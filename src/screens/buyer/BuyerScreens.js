@@ -1095,8 +1095,8 @@ export function BuyerProfileScreen({ navigation }) {
     myStore,
     setMode,
   } = useMercatto();
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     goToLogin(navigation);
   };
   const items = [

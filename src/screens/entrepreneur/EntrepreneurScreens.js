@@ -74,8 +74,8 @@ export function EntrepreneurDashboardScreen({ navigation }) {
   const lowStockProducts = storeProducts.filter(
     (product) => product.stock <= 3,
   );
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     goToLogin(navigation);
   };
   return (
@@ -584,8 +584,8 @@ export function SellerBusinessScreen({ navigation }) {
           title="Cerrar sesión"
           icon="log-out-outline"
           variant="secondary"
-          onPress={() => {
-            logout();
+          onPress={async () => {
+            await logout();
             goToLogin(navigation);
           }}
         />

@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Children } from "react";
 import {
     Image,
     Pressable,
@@ -6,6 +7,7 @@ import {
     StyleSheet,
     Text,
     TextInput,
+    useWindowDimensions,
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -21,20 +23,74 @@ import {
 
 export const logoSource = require("../../assets/images/icon.png");
 
+export function useResponsiveLayout() {
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
+
+  return {
+    width,
+    height,
+    isLandscape,
+    isCompactLandscape: isLandscape && height < 500,
+    isWide: width >= 700,
+  };
+}
+
 export function Screen({ children, scroll = true, style, contentStyle }) {
   const Wrapper = scroll ? ScrollView : View;
+  const { isCompactLandscape } = useResponsiveLayout();
   return (
     <SafeAreaView style={[styles.safeArea, style]}>
       <Wrapper
         contentInsetAdjustmentBehavior={scroll ? "automatic" : undefined}
+        keyboardShouldPersistTaps={scroll ? "handled" : undefined}
         contentContainerStyle={
-          scroll ? [styles.scrollContent, contentStyle] : undefined
+          scroll
+            ? [
+                styles.scrollContent,
+                styles.contentFrame,
+                isCompactLandscape && styles.scrollContentLandscape,
+                contentStyle,
+              ]
+            : undefined
         }
-        style={!scroll ? [styles.flex, contentStyle] : undefined}
+        style={
+          !scroll
+            ? [styles.flex, styles.contentFrame, contentStyle]
+            : undefined
+        }
       >
         {children}
       </Wrapper>
     </SafeAreaView>
+  );
+}
+
+export function ResponsiveGrid({
+  children,
+  minItemWidth = 320,
+  style,
+  itemStyle,
+}) {
+  const { isLandscape, isWide } = useResponsiveLayout();
+  const useColumns = isLandscape || isWide;
+
+  return (
+    <View style={[styles.responsiveGrid, style]}>
+      {Children.map(children, (child) => (
+        <View
+          style={[
+            styles.responsiveGridItem,
+            useColumns
+              ? { flexBasis: minItemWidth, flexGrow: 1 }
+              : styles.responsiveGridItemSingle,
+            itemStyle,
+          ]}
+        >
+          {child}
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -538,10 +594,33 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
+  contentFrame: {
+    width: "100%",
+    maxWidth: 1040,
+    alignSelf: "center",
+  },
   scrollContent: {
+    flexGrow: 1,
     padding: spacing.md,
     paddingBottom: spacing.xl,
     gap: spacing.md,
+  },
+  scrollContentLandscape: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  responsiveGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    alignItems: "flex-start",
+  },
+  responsiveGridItem: {
+    minWidth: 0,
+  },
+  responsiveGridItemSingle: {
+    width: "100%",
   },
   logoWrap: {
     alignItems: "center",

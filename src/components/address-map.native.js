@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useRef } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 import MapView from "react-native-maps";
 
 import { colors, radius, shadows } from "../theme/mercattoTheme";
@@ -10,6 +10,8 @@ const DELTA = 0.009;
 export default function AddressMap({ coordinates, onCoordinateChange }) {
   const mapRef = useRef(null);
   const ignoreNextRegion = useRef(true);
+  const { width, height } = useWindowDimensions();
+  const compactLandscape = width > height && height < 500;
 
   useEffect(() => {
     ignoreNextRegion.current = true;
@@ -24,7 +26,12 @@ export default function AddressMap({ coordinates, onCoordinateChange }) {
   }, [coordinates]);
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        compactLandscape && styles.containerLandscape,
+      ]}
+    >
       <MapView
         ref={mapRef}
         initialRegion={{
@@ -59,6 +66,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#E7E4DC",
     ...shadows.soft,
+  },
+  containerLandscape: {
+    height: 190,
   },
   pin: {
     position: "absolute",

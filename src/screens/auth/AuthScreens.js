@@ -21,6 +21,7 @@ import {
   PrimaryButton,
   Screen,
   SearchBar,
+  useResponsiveLayout,
 } from "../../components/MercattoUI";
 import { useMercatto } from "../../context/MercattoContext";
 import {
@@ -79,6 +80,7 @@ export function SplashScreen({ navigation }) {
 }
 
 export function LoginScreen({ navigation }) {
+  const { isCompactLandscape } = useResponsiveLayout();
   const { login } = useMercatto();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -124,17 +126,35 @@ export function LoginScreen({ navigation }) {
   };
 
   return (
-    <Screen contentStyle={styles.authContent}>
-      <KeyboardAvoidingView behavior="padding" style={{ gap: spacing.md }}>
-        <MercattoLogo />
-        <View style={{ alignItems: "center", gap: 6 }}>
-          <Text style={typography.h2}>Bienvenido de vuelta</Text>
-          <Text style={[typography.muted, { textAlign: "center" }]}>
-            Ingresa con tu correo electrónico para continuar.
-          </Text>
+    <Screen
+      contentStyle={[
+        styles.authContent,
+        isCompactLandscape && styles.authContentLandscape,
+      ]}
+    >
+      <KeyboardAvoidingView
+        behavior="padding"
+        style={[
+          styles.authLayout,
+          isCompactLandscape && styles.authLayoutLandscape,
+        ]}
+      >
+        <View
+          style={[
+            styles.authIntro,
+            isCompactLandscape && styles.authIntroLandscape,
+          ]}
+        >
+          <MercattoLogo size={isCompactLandscape ? 68 : 82} />
+          <View style={{ alignItems: "center", gap: 6 }}>
+            <Text style={typography.h2}>Bienvenido de vuelta</Text>
+            <Text style={[typography.muted, { textAlign: "center" }]}>
+              Ingresa con tu correo electrónico para continuar.
+            </Text>
+          </View>
         </View>
 
-        <Card>
+        <Card style={isCompactLandscape && styles.authCardLandscape}>
           <Field
             label="Correo electrónico"
             placeholder="maria@correo.com"
@@ -844,6 +864,30 @@ const styles = StyleSheet.create({
   authContent: {
     flexGrow: 1,
     justifyContent: "center",
+  },
+  authContentLandscape: {
+    paddingVertical: spacing.sm,
+  },
+  authLayout: {
+    gap: spacing.md,
+  },
+  authLayoutLandscape: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.lg,
+  },
+  authIntro: {
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  authIntroLandscape: {
+    flex: 0.72,
+    minWidth: 0,
+  },
+  authCardLandscape: {
+    flex: 1.28,
+    gap: spacing.sm,
+    padding: spacing.md,
   },
   forgot: {
     alignSelf: "flex-end",

@@ -1,11 +1,19 @@
 import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import { colors, radius } from "../theme/mercattoTheme";
 
 export default function AddressMap({ coordinates }) {
+  const { width, height } = useWindowDimensions();
+  const compactLandscape = width > height && height < 500;
+
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        compactLandscape && styles.containerLandscape,
+      ]}
+    >
       <View style={[styles.road, styles.roadOne]} />
       <View style={[styles.road, styles.roadTwo]} />
       <View style={[styles.road, styles.roadThree]} />
@@ -32,6 +40,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#E9E5DC",
     position: "relative",
+  },
+  containerLandscape: {
+    height: 190,
   },
   road: {
     position: "absolute",

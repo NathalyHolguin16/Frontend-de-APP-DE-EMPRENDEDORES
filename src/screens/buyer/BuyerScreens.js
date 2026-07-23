@@ -29,9 +29,11 @@ import {
   PrimaryButton,
   ProductCard,
   PromoCard,
+  ResponsiveGrid,
   Screen,
   SearchBar,
   SectionHeader,
+  useResponsiveLayout,
 } from "../../components/MercattoUI";
 import {
   cities,
@@ -70,6 +72,7 @@ function isBusinessAvailableInCity(business, city) {
 }
 
 export function BuyerHomeScreen({ navigation }) {
+  const { isCompactLandscape } = useResponsiveLayout();
   const {
     businesses,
     products,
@@ -115,8 +118,19 @@ export function BuyerHomeScreen({ navigation }) {
   );
 
   return (
-    <Screen style={styles.homeSafe} contentStyle={styles.homeContent}>
-      <View style={styles.homeTop}>
+    <Screen
+      style={styles.homeSafe}
+      contentStyle={[
+        styles.homeContent,
+        isCompactLandscape && styles.homeContentLandscape,
+      ]}
+    >
+      <View
+        style={[
+          styles.homeTop,
+          isCompactLandscape && styles.homeTopLandscape,
+        ]}
+      >
         <View style={styles.brandRow}>
           <Pressable onPress={() => navigation.navigate("CitySelect", { fromApp: true })} style={styles.brandMark}>
             <Text style={styles.brandText}>MERCATTO</Text>
@@ -150,6 +164,7 @@ export function BuyerHomeScreen({ navigation }) {
         products={visibleProducts}
         businessCount={filteredBusinesses.length}
         city={selectedCity}
+        compact={isCompactLandscape}
       />
 
       <View style={styles.floatingSearch}>
@@ -192,8 +207,9 @@ export function BuyerHomeScreen({ navigation }) {
           onPress={refreshCatalog}
         />
       ) : null}
-      {!isCatalogLoading && !catalogError
-        ? filteredBusinesses.map((business) => (
+      {!isCatalogLoading && !catalogError ? (
+        <ResponsiveGrid>
+          {filteredBusinesses.map((business) => (
             <BusinessCard
               key={business.id}
               business={business}
@@ -205,8 +221,9 @@ export function BuyerHomeScreen({ navigation }) {
                 })
               }
             />
-          ))
-        : null}
+          ))}
+        </ResponsiveGrid>
+      ) : null}
       {!isCatalogLoading && !catalogError && !filteredBusinesses.length ? (
         <EmptyState
           icon="storefront-outline"
@@ -229,11 +246,26 @@ export function BuyerHomeScreen({ navigation }) {
   );
 }
 
-function HeroDealCard({ navigation, products, businessCount, city }) {
+function HeroDealCard({
+  navigation,
+  products,
+  businessCount,
+  city,
+  compact = false,
+}) {
   const heroProducts = products.filter((product) => product.image).slice(0, 3);
   return (
-    <Pressable onPress={() => navigation.navigate("Promos")} style={({ pressed }) => [styles.heroDeal, pressed && styles.pressed]}>
-      <View style={styles.heroCopy}>
+    <Pressable
+      onPress={() => navigation.navigate("Promos")}
+      style={({ pressed }) => [
+        styles.heroDeal,
+        compact && styles.heroDealLandscape,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View
+        style={[styles.heroCopy, compact && styles.heroCopyLandscape]}
+      >
         <Text style={styles.plusPill}>mercatto local</Text>
         <Text style={styles.heroEyebrow}>Emprendimientos de tu ciudad</Text>
         <Text style={styles.heroTitle}>Compra local en {city}</Text>
@@ -265,6 +297,7 @@ function HeroDealCard({ navigation, products, businessCount, city }) {
 }
 
 export function BusinessDetailScreen({ route, navigation }) {
+  const { isCompactLandscape } = useResponsiveLayout();
   const {
     businesses,
     products,
@@ -357,7 +390,12 @@ export function BusinessDetailScreen({ route, navigation }) {
 
   return (
     <Screen contentStyle={{ paddingTop: 0 }}>
-      <View style={styles.coverWrap}>
+      <View
+        style={[
+          styles.coverWrap,
+          isCompactLandscape && styles.coverWrapLandscape,
+        ]}
+      >
         {business.cover ? (
           <Image
             source={{ uri: business.cover }}
@@ -429,16 +467,18 @@ export function BusinessDetailScreen({ route, navigation }) {
         />
       </Card>
       <SectionHeader title="Productos" />
-      {businessProducts.map((product) => (
-        <ProductCard
-          key={product.id}
-          product={product}
-          onPress={() => navigation.navigate("ProductDetail", { productId: product.id })}
-          onAdd={() => quickAdd(product)}
-          added={recentlyAddedId === product.id}
-          addDisabled={recentlyAddedId === product.id}
-        />
-      ))}
+      <ResponsiveGrid>
+        {businessProducts.map((product) => (
+          <ProductCard
+            key={product.id}
+            product={product}
+            onPress={() => navigation.navigate("ProductDetail", { productId: product.id })}
+            onAdd={() => quickAdd(product)}
+            added={recentlyAddedId === product.id}
+            addDisabled={recentlyAddedId === product.id}
+          />
+        ))}
+      </ResponsiveGrid>
       {!businessProducts.length ? (
         <EmptyState
           icon="cube-outline"
@@ -460,6 +500,7 @@ export function BusinessDetailScreen({ route, navigation }) {
 }
 
 export function ProductDetailScreen({ route, navigation }) {
+  const { isCompactLandscape } = useResponsiveLayout();
   const { addToCart, businesses, products } = useMercatto();
   const product =
     products.find((item) => item.id === route.params?.productId) || null;
@@ -521,11 +562,20 @@ export function ProductDetailScreen({ route, navigation }) {
       {product.image ? (
         <Image
           source={{ uri: product.image }}
-          style={styles.productHero}
+          style={[
+            styles.productHero,
+            isCompactLandscape && styles.productHeroLandscape,
+          ]}
           resizeMode="cover"
         />
       ) : (
-        <View style={[styles.productHero, styles.coverPlaceholder]}>
+        <View
+          style={[
+            styles.productHero,
+            isCompactLandscape && styles.productHeroLandscape,
+            styles.coverPlaceholder,
+          ]}
+        >
           <Ionicons
             name="image-outline"
             size={52}
@@ -1061,15 +1111,17 @@ export function BuyerOrdersScreen({ navigation }) {
       ) : null}
 
       {!isOrdersLoading && !ordersError && visibleOrders.length ? (
-        visibleOrders.map((order) => (
-          <BuyerOrderCard
-            key={order.id}
-            order={order}
-            navigation={navigation}
-            isCancelling={cancellingOrderId === order.id}
-            onCancel={() => requestCancellation(order)}
-          />
-        ))
+        <ResponsiveGrid>
+          {visibleOrders.map((order) => (
+            <BuyerOrderCard
+              key={order.id}
+              order={order}
+              navigation={navigation}
+              isCancelling={cancellingOrderId === order.id}
+              onCancel={() => requestCancellation(order)}
+            />
+          ))}
+        </ResponsiveGrid>
       ) : null}
 
       {!isOrdersLoading && !ordersError && !visibleOrders.length ? (
@@ -1238,15 +1290,17 @@ export function FavoritesScreen({ navigation }) {
   return (
     <Screen>
       <Text style={typography.h1}>Favoritos</Text>
-      {list.map((business) => (
-        <BusinessCard
-          key={business.id}
-          business={business}
-          favorite
-          onToggleFavorite={() => toggleFavorite(business.id)}
-          onPress={() => navigation.navigate("BusinessDetail", { businessId: business.id })}
-        />
-      ))}
+      <ResponsiveGrid>
+        {list.map((business) => (
+          <BusinessCard
+            key={business.id}
+            business={business}
+            favorite
+            onToggleFavorite={() => toggleFavorite(business.id)}
+            onPress={() => navigation.navigate("BusinessDetail", { businessId: business.id })}
+          />
+        ))}
+      </ResponsiveGrid>
       {!list.length ? <EmptyState icon="heart-outline" title="Sin favoritos" message="Guarda emprendimientos para encontrarlos rápido." /> : null}
     </Screen>
   );
@@ -1714,6 +1768,9 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     backgroundColor: colors.white,
   },
+  homeContentLandscape: {
+    gap: spacing.md,
+  },
   homeTop: {
     marginHorizontal: -spacing.md,
     paddingHorizontal: spacing.md,
@@ -1724,6 +1781,11 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 34,
     gap: spacing.lg,
     overflow: "hidden",
+  },
+  homeTopLandscape: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
   },
   brandRow: {
     flexDirection: "row",
@@ -1785,12 +1847,19 @@ const styles = StyleSheet.create({
     position: "relative",
     ...shadows.card,
   },
+  heroDealLandscape: {
+    minHeight: 208,
+  },
   heroCopy: {
     width: "57%",
     padding: spacing.lg,
     justifyContent: "center",
     gap: spacing.sm,
     zIndex: 2,
+  },
+  heroCopyLandscape: {
+    width: "52%",
+    padding: spacing.md,
   },
   plusPill: {
     alignSelf: "flex-start",
@@ -2092,6 +2161,9 @@ const styles = StyleSheet.create({
     marginHorizontal: -spacing.md,
     marginBottom: -52,
   },
+  coverWrapLandscape: {
+    height: 190,
+  },
   coverImage: {
     width: "100%",
     height: "100%",
@@ -2164,6 +2236,9 @@ const styles = StyleSheet.create({
     width: "100%",
     marginHorizontal: -spacing.md,
     backgroundColor: colors.softOrange,
+  },
+  productHeroLandscape: {
+    height: 210,
   },
   detailBack: {
     position: "absolute",

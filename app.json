@@ -4,7 +4,7 @@
     "slug": "mercatto",
     "version": "1.0.0",
     "description": "Marketplace móvil para conectar compradores con emprendimientos locales.",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "mercatto",
     "userInterfaceStyle": "light",

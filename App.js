@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
-import { Text } from "react-native";
+import { Text, useWindowDimensions } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { MercattoProvider } from "./src/context/MercattoContext";
@@ -88,8 +88,11 @@ function TabIcon({ name, color, focused }) {
 }
 
 function BuyerTabs() {
+  const { width, height } = useWindowDimensions();
+  const compactLandscape = width > height && height < 500;
+
   return (
-    <Tab.Navigator screenOptions={tabOptions}>
+    <Tab.Navigator screenOptions={getTabOptions(compactLandscape)}>
       <Tab.Screen
         name="Inicio"
         component={BuyerHomeScreen}
@@ -115,8 +118,11 @@ function BuyerTabs() {
 }
 
 function EntrepreneurTabs() {
+  const { width, height } = useWindowDimensions();
+  const compactLandscape = width > height && height < 500;
+
   return (
-    <Tab.Navigator screenOptions={tabOptions}>
+    <Tab.Navigator screenOptions={getTabOptions(compactLandscape)}>
       <Tab.Screen
         name="Resumen"
         component={EntrepreneurDashboardScreen}
@@ -146,24 +152,27 @@ function EntrepreneurTabs() {
   );
 }
 
-const tabOptions = {
-  headerShown: false,
-  tabBarActiveTintColor: colors.primaryDark,
-  tabBarInactiveTintColor: "#6F6A75",
-  tabBarStyle: {
-    minHeight: 76,
-    paddingTop: 8,
-    paddingBottom: 12,
-    backgroundColor: colors.white,
-    borderTopWidth: 1,
-    borderTopColor: "#EFE9DF",
-    boxShadow: "0 -10px 24px rgba(23, 25, 24, 0.08)",
-  },
-  tabBarLabelStyle: {
-    fontSize: 12,
-    fontWeight: "900",
-  },
-};
+function getTabOptions(compactLandscape) {
+  return {
+    headerShown: false,
+    tabBarActiveTintColor: colors.primaryDark,
+    tabBarInactiveTintColor: "#6F6A75",
+    tabBarHideOnKeyboard: true,
+    tabBarStyle: {
+      minHeight: compactLandscape ? 58 : 76,
+      paddingTop: compactLandscape ? 3 : 8,
+      paddingBottom: compactLandscape ? 4 : 12,
+      backgroundColor: colors.white,
+      borderTopWidth: 1,
+      borderTopColor: "#EFE9DF",
+      boxShadow: "0 -10px 24px rgba(23, 25, 24, 0.08)",
+    },
+    tabBarLabelStyle: {
+      fontSize: compactLandscape ? 11 : 12,
+      fontWeight: "900",
+    },
+  };
+}
 
 export default function App() {
   return (

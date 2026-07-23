@@ -22,6 +22,7 @@ import {
   IconButton,
   PrimaryButton,
   ProductCard,
+  ResponsiveGrid,
   Screen,
   SectionHeader,
 } from "../../components/MercattoUI";
@@ -310,48 +311,52 @@ export function SellerOrdersScreen() {
         />
       ) : null}
 
-      {!sellerOrdersError && filteredOrders.map((order) => (
-        <Card key={order.id}>
-          <View style={styles.headerLine}>
-            <View style={{ flex: 1 }}>
-              <Text style={typography.h3}>
-                Pedido #{String(order.id || "").slice(0, 8).toUpperCase()}
-              </Text>
-              <Text style={typography.muted}>{order.buyer} · {order.time}</Text>
-            </View>
-            <Chip label={order.status} tone={order.status === "Nuevo" ? colors.softOrange : "#E9F7EF"} />
-          </View>
-          <Text style={typography.muted}>{order.items.join(", ")}</Text>
-          <InfoLine label="Contacto" value={order.phone} />
-          <InfoLine label="Total" value={`$${order.total.toFixed(2)}`} />
-          <InfoLine label="Pago" value={order.payment} />
-          <InfoLine label="Entrega" value={`${order.deliveryMode} · ${order.address}`} />
-          <View style={styles.actionWrap}>
-            {order.status === "Nuevo" ? (
-              <>
-                <PrimaryButton title="Aceptar" disabled={updatingOrderId === order.id} onPress={() => changeStatus(order.id, "En preparación")} style={{ flex: 1 }} />
-                <PrimaryButton title="Rechazar" disabled={updatingOrderId === order.id} variant="secondary" onPress={() => confirmCancellation(order)} style={{ flex: 1 }} />
-              </>
-            ) : !["Entregado", "Cancelado"].includes(order.status) ? (
-              <>
-                <PrimaryButton title={`Marcar como ${nextStatus(order.status).toLowerCase()}`} disabled={updatingOrderId === order.id} onPress={() => changeStatus(order.id, nextStatus(order.status))} style={{ flex: 1 }} />
-                <PrimaryButton title="Cancelar pedido" disabled={updatingOrderId === order.id} variant="secondary" onPress={() => confirmCancellation(order)} style={{ flex: 1 }} />
-              </>
-            ) : null}
-            <PrimaryButton title="Contactar" variant="secondary" onPress={() => contactBuyer(order.phone)} style={{ flex: 1 }} />
-          </View>
-          <PrimaryButton
-            title="Ver dirección"
-            variant="ghost"
-            onPress={() =>
-              Alert.alert(
-                "Dirección del pedido",
-                order.address || "El pedido no requiere dirección de entrega.",
-              )
-            }
-          />
-        </Card>
-      ))}
+      {!sellerOrdersError ? (
+        <ResponsiveGrid>
+          {filteredOrders.map((order) => (
+            <Card key={order.id}>
+              <View style={styles.headerLine}>
+                <View style={{ flex: 1 }}>
+                  <Text style={typography.h3}>
+                    Pedido #{String(order.id || "").slice(0, 8).toUpperCase()}
+                  </Text>
+                  <Text style={typography.muted}>{order.buyer} · {order.time}</Text>
+                </View>
+                <Chip label={order.status} tone={order.status === "Nuevo" ? colors.softOrange : "#E9F7EF"} />
+              </View>
+              <Text style={typography.muted}>{order.items.join(", ")}</Text>
+              <InfoLine label="Contacto" value={order.phone} />
+              <InfoLine label="Total" value={`$${order.total.toFixed(2)}`} />
+              <InfoLine label="Pago" value={order.payment} />
+              <InfoLine label="Entrega" value={`${order.deliveryMode} · ${order.address}`} />
+              <View style={styles.actionWrap}>
+                {order.status === "Nuevo" ? (
+                  <>
+                    <PrimaryButton title="Aceptar" disabled={updatingOrderId === order.id} onPress={() => changeStatus(order.id, "En preparación")} style={{ flex: 1 }} />
+                    <PrimaryButton title="Rechazar" disabled={updatingOrderId === order.id} variant="secondary" onPress={() => confirmCancellation(order)} style={{ flex: 1 }} />
+                  </>
+                ) : !["Entregado", "Cancelado"].includes(order.status) ? (
+                  <>
+                    <PrimaryButton title={`Marcar como ${nextStatus(order.status).toLowerCase()}`} disabled={updatingOrderId === order.id} onPress={() => changeStatus(order.id, nextStatus(order.status))} style={{ flex: 1 }} />
+                    <PrimaryButton title="Cancelar pedido" disabled={updatingOrderId === order.id} variant="secondary" onPress={() => confirmCancellation(order)} style={{ flex: 1 }} />
+                  </>
+                ) : null}
+                <PrimaryButton title="Contactar" variant="secondary" onPress={() => contactBuyer(order.phone)} style={{ flex: 1 }} />
+              </View>
+              <PrimaryButton
+                title="Ver dirección"
+                variant="ghost"
+                onPress={() =>
+                  Alert.alert(
+                    "Dirección del pedido",
+                    order.address || "El pedido no requiere dirección de entrega.",
+                  )
+                }
+              />
+            </Card>
+          ))}
+        </ResponsiveGrid>
+      ) : null}
 
       {!isSellerOrdersLoading && !sellerOrdersError && !filteredOrders.length ? (
         <EmptyState
@@ -482,24 +487,26 @@ export function SellerProductsScreen() {
           onPress={submit}
         />
       </Card>
-      {sellerProducts.map((product) => (
-        <Card key={product.id}>
-          <ProductCard
-            product={product}
-            onPress={() => editProduct(product)}
-            showAdd={false}
-          />
-          <View style={styles.tagWrap}>
-            <Chip label="Editar" onPress={() => editProduct(product)} />
-            <Chip label={product.isActive ? "Pausar" : "Activar"} onPress={() => toggleProduct(product)} />
-            <Chip label="Eliminar" onPress={() => confirmDelete(product)} />
-          </View>
-          <InfoLine label="Stock" value={`${product.stock} unidades`} />
-          <InfoLine label="Preparación" value={product.prepTime} />
-          <InfoLine label="Variaciones" value={product.variants.join(", ")} />
-          <InfoLine label="Complementos" value={product.complements.join(", ")} />
-        </Card>
-      ))}
+      <ResponsiveGrid>
+        {sellerProducts.map((product) => (
+          <Card key={product.id}>
+            <ProductCard
+              product={product}
+              onPress={() => editProduct(product)}
+              showAdd={false}
+            />
+            <View style={styles.tagWrap}>
+              <Chip label="Editar" onPress={() => editProduct(product)} />
+              <Chip label={product.isActive ? "Pausar" : "Activar"} onPress={() => toggleProduct(product)} />
+              <Chip label="Eliminar" onPress={() => confirmDelete(product)} />
+            </View>
+            <InfoLine label="Stock" value={`${product.stock} unidades`} />
+            <InfoLine label="Preparación" value={product.prepTime} />
+            <InfoLine label="Variaciones" value={product.variants.join(", ")} />
+            <InfoLine label="Complementos" value={product.complements.join(", ")} />
+          </Card>
+        ))}
+      </ResponsiveGrid>
       {myStore && !sellerProducts.length ? (
         <EmptyState
           icon="cube-outline"
